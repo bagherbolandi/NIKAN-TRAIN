@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="10" time="12.534" timestamp="2026-10-13T19:36:58.775580+00:00" hostname="runnervmfi6oq"><testcase classname="tests.test_app" name="test_isolation_and_csrf" time="1.919" /><testcase classname="tests.test_app" name="test_training_cycle" time="1.718"><failure message="assert False&#10; +  where False = &lt;built-in method startswith of bytes object at 0x000001287754E730&gt;(b'SQLite format 3')&#10; +    where &lt;built-in method startswith of bytes object at 0x000001287754E730&gt; = b'{&quot;error&quot;:&quot;\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc \\u0628\\u0647 \\u0627\\u06cc\\u0646 \\u0634\\u0631\\u06a9\\u062a \\u0645\\u062c\\u0627\\u0632 \\u0646\\u06cc\\u0633\\u062a&quot;}\n'.startswith&#10; +      where b'{&quot;error&quot;:&quot;\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc \\u0628\\u0647 \\u0627\\u06cc\\u0646 \\u0634\\u0631\\u06a9\\u062a \\u0645\\u062c\\u0627\\u0632 \\u0646\\u06cc\\u0633\\u062a&quot;}\n' = &lt;WrapperTestResponse 156 bytes [403 FORBIDDEN]&gt;.data">ready = (&lt;Flask 'app'&gt;, &lt;FlaskClient &lt;Flask 'app'&gt;&gt;, {'X-CSRF-Token': '5df6c73005f553a3c3b471a8ad346b9d096d4f5b6487f0c876b650cf69348245'})
+
+    def test_training_cycle(ready):
+     app,c,h=ready
+     e=post(c,h,'employees',{'code':'1','name':'Ali','job':'Engineer'}).json['id'];s=post(c,h,'skills',{'code':'S1','title':'Safety'}).json['id']
+     assert post(c,h,'requirements',{'job':'Engineer','skill_id':s,'level':3}).status_code==201
+     assert post(c,h,'assessments',{'employee_id':e,'skill_id':s,'level':1}).status_code==201
+     assert c.get('/api/gaps?company_id=1').json[0]['gap']==2
+     course=post(c,h,'courses',{'skill_id':s,'title':'Safety','date':'1405/03/25','hours':4,'cost':5}).json['id']
+     assert post(c,h,'records',{'employee_id':e,'course_id':course,'level':3,'score':90,'reaction':4,'behavior':4,'result':80}).status_code==201
+     assert len(c.get('/api/gaps?company_id=1').json)==1
+     assert c.put(f'/api/data/courses/{course}?company_id=1',json={'status':'completed'},headers=h).status_code==200
+     assert c.get('/api/gaps?company_id=1').json==[]
+&gt;    backup=c.post('/api/backup',headers=h);assert backup.data.startswith(b'SQLite format 3')
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E    assert False
+E     +  where False = &lt;built-in method startswith of bytes object at 0x000001287754E730&gt;(b'SQLite format 3')
+E     +    where &lt;built-in method startswith of bytes object at 0x000001287754E730&gt; = b'{"error":"\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc \\u0628\\u0647 \\u0627\\u06cc\\u0646 \\u0634\\u0631\\u06a9\\u062a \\u0645\\u062c\\u0627\\u0632 \\u0646\\u06cc\\u0633\\u062a"}\n'.startswith
+E     +      where b'{"error":"\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc \\u0628\\u0647 \\u0627\\u06cc\\u0646 \\u0634\\u0631\\u06a9\\u062a \\u0645\\u062c\\u0627\\u0632 \\u0646\\u06cc\\u0633\\u062a"}\n' = &lt;WrapperTestResponse 156 bytes [403 FORBIDDEN]&gt;.data
+
+tests\test_app.py:36: AssertionError</failure></testcase><testcase classname="tests.test_app" name="test_auth_and_viewer" time="1.364" /><testcase classname="tests.test_app" name="test_excel_import_repeatable" time="1.721" /><testcase classname="tests.test_app" name="test_validation_and_user_revocation" time="0.920" /><testcase classname="tests.test_app" name="test_backup_restore_and_export_safety" time="0.598"><failure message="sqlite3.DatabaseError: file is not a database">ready = (&lt;Flask 'app'&gt;, &lt;FlaskClient &lt;Flask 'app'&gt;&gt;, {'X-CSRF-Token': '2d803ee3e1f6a94fc328667474231d76bac6b6a77c2fc5a128545b4647c8b73e'})
+tmp_path = WindowsPath('C:/Users/runneradmin/AppData/Local/Temp/pytest-of-runneradmin/pytest-0/test_backup_restore_and_export0')
+
+    def test_backup_restore_and_export_safety(ready,tmp_path):
+     app,c,h=ready
+     post(c,h,'employees',{'code':'1','name':'=HYPERLINK("evil")','job':'Engineer'})
+     sid=post(c,h,'skills',{'code':'S','title':'Safety'}).json['id']
+     post(c,h,'requirements',{'job':'Engineer','skill_id':sid,'level':3})
+     export=c.get('/api/export?company_id=1');assert b"'=HYPERLINK" in export.data
+     backup=c.post('/api/backup',headers=h).data;path=tmp_path/'restored.sqlite3';path.write_bytes(backup)
+     with sqlite3.connect(path) as db:
+&gt;     assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     sqlite3.DatabaseError: file is not a database
+
+tests\test_app.py:82: DatabaseError</failure></testcase><testcase classname="tests.test_desktop" name="test_desktop_server_lifecycle" time="1.352" /><testcase classname="tests.test_professional" name="test_bank_job_passport" time="0.783" /><testcase classname="tests.test_professional" name="test_certificates_isolation_backup" time="0.545"><failure message="sqlite3.DatabaseError: file is not a database">ready = (&lt;Flask 'app'&gt;, &lt;FlaskClient &lt;Flask 'app'&gt;&gt;, {'X-CSRF-Token': '19ea4d057437019c6c871631e8798240201a44c252dea4845e041681f3d16492'})
+tmp_path = WindowsPath('C:/Users/runneradmin/AppData/Local/Temp/pytest-of-runneradmin/pytest-0/test_certificates_isolation_ba0')
+
+    def test_certificates_isolation_backup(ready,tmp_path):
+     app,c,h=ready;eid=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'E1','name':'Test'}).json['id']
+     pdf=b'%PDF-1.4\nTest certificate\n%%EOF'
+     def upload(cid=1,payload=pdf):return c.post(f'/api/certificates?company_id={cid}',headers=h,data={'employee_id':str(eid),'title':'Safety certificate','file':(io.BytesIO(payload),'cert.pdf')})
+     assert upload(2).status_code==400
+     assert upload(payload=b'&lt;script&gt;bad&lt;/script&gt;').status_code==400
+     r=upload();assert r.status_code==201,r.json;rid=r.json['id']
+     assert c.get(f'/api/certificates/{rid}?company_id=1').data==pdf
+     assert c.get(f'/api/certificates/{rid}?company_id=2').status_code==404
+     assert c.get(f'/api/passports/{eid}?company_id=1').json['certificates'][0]['title']=='Safety certificate'
+     backup=c.post('/api/backup',headers=h);path=tmp_path/'backup.sqlite3';path.write_bytes(backup.data)
+&gt;    with sqlite3.connect(path) as db:assert db.execute('SELECT content FROM certificates').fetchone()[0]==pdf
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E    sqlite3.DatabaseError: file is not a database
+
+tests\test_professional.py:32: DatabaseError</failure></testcase><testcase classname="tests.test_professional" name="test_import_preserves_assessment_provenance" time="1.114" /></testsuite></testsuites>
