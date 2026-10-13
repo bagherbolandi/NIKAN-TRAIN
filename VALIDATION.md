@@ -19,10 +19,18 @@
 - SHA256 نهایی نصاب و manifest فایل‌های داخل payload در distribution ثبت می‌شوند؛ بررسی manifest، اجرای واقعی DLLهای ویندوز نیست.
 - نصاب امضای دیجیتال ناشر ندارد.
 
-## وضعیت آزمون ویندوز
+## آزمون واقعی ویندوز — موفق
 
-در محیط حاضر ویندوز یا Wine موجود نیست. **نصب و اجرای native نصاب در این محیط انجام نشده است.** اسکریپت packaging/validate_payload.py منطق احراز هویت، قالب مشاغل و HTTP را در Linux آزمود؛ این نتیجه را به runtime ویندوز تعمیم نمی‌دهیم.
+اجرای GitHub Actions شماره **38456618965** با وضعیت **Success** پایان یافت:
+https://github.com/bagherbolandi/NIKAN-TRAIN/actions/runs/38456618965
 
-workflow `.github/workflows/windows-validation.yml` برای Windows runner آماده شده است: pytest، بررسی checksum، نصب خاموش، وجود shortcutهای دسکتاپ/Start، اجرای interpreter بسته‌شده و HTTP، ارتقا، uninstall و حفظ فایل داده. عبور آن فقط با مشاهده نتیجه واقعی GitHub Actions قابل اعلام است. Windows runner معمولاً Windows Server است و نتیجه آن جای آزمون دستی Windows 10 و 11 روی رایانه کاربر را نمی‌گیرد.
+- هر ۱۰ آزمون برنامه روی Windows runner عبور کردند؛ شکست، خطا و آزمون skipped صفر بود. گزارش JUnit در docs/windows-pytest.xml است.
+- نصاب EXE واقعی روی Windows runner نصب شد؛ shortcut دسکتاپ و منوی Start و مقصد interpreter بررسی شدند.
+- CPython **3.13.16** داخل نصاب اجرا شد و import، ساخت پایگاه، ورود کاربران، بانک ۲۸۱ شایستگی، الگوهای شغلی و HTTP server عبور کردند.
+- نصب مجدد/ارتقا، uninstall و حفظ فایل داده خارج از مسیر نصب عبور کردند. حذف shortcut بعد از uninstall نیز بررسی شد.
+- گزارش بومی docs/windows-installer-result.json وضعیت passed و پلتفرم Microsoft Windows NT 10.0.26100.0 را ثبت کرده است.
+- خطای قفل فایل موقت backup در Windows با بستن صریح اتصال SQLite رفع شد و آزمون حفظ داده و پیوست‌های backup در اجرای موفق ویندوز عبور کرد.
+
+این نتیجه، آزمون خودکار Windows runner است؛ جای آزمون دستی Windows 10/11 روی رایانه کاربر، آزمایش همه نسخه‌های ویندوز یا آزمایش پنجره Edge با کاربر واقعی را نمی‌گیرد. فایل EXE منتشرشده همان فایل با SHA256 بررسی‌شده در workflow است؛ تغییرات بعدی مستندات و آرشیو منبع، فایل EXE را تغییر نمی‌دهند.
 
 ممیزی مستقل امنیتی، آزمون بار، آزمون همه نسخه‌های ویندوز و تأیید بهره‌برداری نهایی انجام نشده‌اند. محدودیت‌های عملکردی و معماری در README.md ثبت شده‌اند.
