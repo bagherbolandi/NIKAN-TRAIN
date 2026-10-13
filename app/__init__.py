@@ -201,7 +201,9 @@ def create_app(data_dir=None,testing=False):
   if g.user['role']!='admin':raise PermissionError()
   temp=root/('backup-'+secrets.token_hex(8)+'.sqlite3')
   try:
-   with sqlite3.connect(temp) as target:db().backup(target)
+   target=sqlite3.connect(temp)
+   try:db().backup(target)
+   finally:target.close()
    payload=temp.read_bytes()
   finally:temp.unlink(missing_ok=True)
   audit('backup');db().commit();return Response(payload,mimetype='application/octet-stream',headers={'Content-Disposition':'attachment; filename=nikan-backup.sqlite3'})

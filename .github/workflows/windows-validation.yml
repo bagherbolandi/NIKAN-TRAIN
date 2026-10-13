@@ -33,25 +33,17 @@ jobs:
           }
       - name: Verify and install the offline executable
         shell: pwsh
+        run: ./packaging/windows_installer_smoke.ps1
+      - name: Publish native installer result
+        if: always()
+        shell: pwsh
         run: |
-          $expected = (Get-Content distribution/NikanTraining-Setup.exe.sha256).Split(' ')[0]
-          if ((Get-FileHash distribution/NikanTraining-Setup.exe -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Installer checksum mismatch' }
-          $setup = Start-Process -FilePath "$pwd/distribution/NikanTraining-Setup.exe" -ArgumentList '/S' -Wait -PassThru
-          if ($setup.ExitCode -ne 0) { throw "Installer exit $($setup.ExitCode)" }
-          $install = Join-Path $env:LOCALAPPDATA 'Programs/NikanTraining'
-          if (!(Test-Path "$install/runtime/pythonw.exe")) { throw 'Bundled interpreter missing' }
-          if (!(Test-Path ([Environment]::GetFolderPath('Desktop') + '/Nikan Training.lnk'))) { throw 'Desktop shortcut missing' }
-          if (!(Test-Path ([Environment]::GetFolderPath('Programs') + '/Nikan Training/Nikan Training.lnk'))) { throw 'Start menu shortcut missing' }
-          Copy-Item packaging/validate_payload.py "$install/validate_payload.py"
-          & "$install/runtime/python.exe" -I "$install/validate_payload.py"
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime validation failed' }
-          $data = Join-Path $env:LOCALAPPDATA 'NikanTraining'
-          New-Item -ItemType Directory -Force $data | Out-Null
-          Set-Content "$data/preservation-test.txt" 'keep business data'
-          $upgrade = Start-Process -FilePath "$pwd/distribution/NikanTraining-Setup.exe" -ArgumentList '/S' -Wait -PassThru
-          if ($upgrade.ExitCode -ne 0 -or !(Test-Path "$data/preservation-test.txt")) { throw 'Upgrade preservation failed' }
-          $uninstall = Start-Process -FilePath "$install/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0 -or !(Test-Path "$data/preservation-test.txt")) { throw 'Uninstall preservation failed' }
+          if (Test-Path docs/windows-installer-result.json) {
+            git add docs/windows-installer-result.json
+            git commit -m "Record native Windows installer result" --allow-empty
+            git pull --rebase origin nikan-training-windows-20261013
+            git push origin HEAD:nikan-training-windows-20261013
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: NikanTraining-Windows-Installer

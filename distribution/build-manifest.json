@@ -31,7 +31,7 @@
     "runtime/LICENSE.txt": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120",
     "runtime/pythonw.exe": "435e222945e1a110559fb71b5ebff8c3d698689b5e5eee0371815c1141d72738",
     "app/importer.py": "c12b762a1b5964502f8da63eb2a6f235e2b1547f1f6723ecb7323aeb2e084038",
-    "app/__init__.py": "b5d893a280699b32447bcbd08bb5da5f10f39b8a3cdc4b9368d59ba2998ec804",
+    "app/__init__.py": "0dc9e1bc1880c64355e677b32281b26f8d4697183920976f6634ccd9a111bb96",
     "app/professional.py": "e65280114ba47e66b1c1f173cae3a22fdce2421a26023463a0701517d9617055",
     "runtime/libs/python313.lib": "dc0393b1fb215eb5927eedbe2cdb5746073d93d75392c4b0072a48d8c0bd1c17",
     "runtime/libs/python3.lib": "218b31a6dedd733cdfe8ba0182cea477a6e150a02bda3deda08a261b3ef5d571",
