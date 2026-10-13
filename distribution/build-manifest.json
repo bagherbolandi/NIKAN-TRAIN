@@ -22,7 +22,7 @@
     "run.py": "2825262fab6be910113617a422d5e7ec7eec0f68c5d6cd767b523ed7b9773c50",
     "stop_desktop.py": "a645e7136106cb200f543e45b33adbd75367e40dfe64e3f30c42e618d36590f7",
     "nikan.ico": "f47b0e5a79af77b27c16b3489167b606da0a245f80d611c76318ab0dfd19ce78",
-    "README.md": "636b76c11118a53f251150c1673fe308981ed2f05eca4777420e711826fd6f87",
+    "README.md": "a7f0f4cbb721ab5ae4d8222ddf72c80513594306c0628f59b786e784143aa639",
     "resources/workbook.xlsx": "be5289c21246a9dee0e229b9b6c789c89d46dc76c46b18e6cdb6b065837d73f8",
     "runtime/python313.dll": "3b29bf9ff39bed8f660f5b935f19657f7ce7f145009851741b11364f6ebcb862",
     "runtime/python3.dll": "a1a32b2475675e784d9b34d33d3a8f3e4afaa563da1feb784b0dd69fc4d8f9dc",
@@ -31,8 +31,9 @@
     "runtime/vcruntime140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
     "runtime/LICENSE.txt": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120",
     "runtime/pythonw.exe": "435e222945e1a110559fb71b5ebff8c3d698689b5e5eee0371815c1141d72738",
+    "app/branding.py": "1431464dbc0238b2e634b8e2141e911c3a3cc6949edd5cfedf9974905fdb2739",
     "app/importer.py": "3c84c07842d51b0c8284927262dd47e1bc7d550cdb29adc92d1b9cca30227a3d",
-    "app/__init__.py": "4bafa6b72dd3e8950104ac8a040c17326812d93ffee62e3ff63b5da27d371f0b",
+    "app/__init__.py": "c37e6385fbb7345aaef9bbd3f0bbb526e1bc0154666107b4cee91e902c1b6186",
     "app/catalog.py": "ff3b3af1d383f8e86a1cfce17670d1ea43b60471657516a698f52c95f67ffc94",
     "app/professional.py": "6c8a88d66aa348c0c89c148008db1a7c84f86464bc20d29922b29e3442fcacbc",
     "runtime/libs/python313.lib": "dc0393b1fb215eb5927eedbe2cdb5746073d93d75392c4b0072a48d8c0bd1c17",
@@ -1782,10 +1783,11 @@
     "runtime/include/internal/mimalloc/mimalloc/prim.h": "f41d6d66db0199a65c1720670947ef548e50e2d0b85b640a630c81e4f1502c81",
     "runtime/include/internal/mimalloc/mimalloc/types.h": "068dee34b03ec849438c01903518bad2f1970f4159410c0261ebf49403a0a280",
     "runtime/include/internal/mimalloc/mimalloc/track.h": "d94934f0ec924e9d91595823fbe740968fec7aed72f54437cd887ec19111ff60",
-    "app/static/workspaces.js": "5bc2d54b93da12a5a70c140486bd784bcc86f1116fb7fea1f86ae3c7b80f5fa9",
-    "app/static/index.html": "db94d4a8011f60a2adc383a430efd94b31b6a09b8a41617fdb7c353a6e11dd8b",
+    "app/static/workspaces.js": "5ee9ce28cd2eb9412a33cb5cc1c55d6f336bbc99459ee394464fd5b05937b835",
+    "app/static/index.html": "84201c015b8e4c3a030d1078ccd0c4f1f69b9571d16b7c3a8fcd6e327948a98f",
+    "app/static/branding.js": "8a9c6eba674a5ce3633f392963483762362734c2d8d893db2c3cc679bc4da34a",
     "app/static/professional.js": "fb19e52a93396a5879b034fffb7261b1bb2e3c588ed5e199ad80cb4426e0b2a9",
-    "app/static/app.js": "930e7c7ffa714a21ff3c1514eb70ee1cd0e064c1e930d735f83b9bb7fa5d42da",
-    "app/static/style.css": "a23254b2a4da50602eefcfcbf7377dcd575dd995e0a8854b9b4df6046b453fed"
+    "app/static/app.js": "57408df07a4bb8725ddf4a2f4cade186420675119310e42ddbf950dface70bea",
+    "app/static/style.css": "f9ee7c1da50e35d28ba558f32d45d8132f531ed3832185095b183f7ec7690764"
   }
 }

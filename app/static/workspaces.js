@@ -45,4 +45,3 @@ window.addEventListener('beforeunload',e=>{if(pendingWorkspace){e.preventDefault
 document.addEventListener('click',e=>{if(pendingWorkspace&&e.target.closest('nav button,.master-item,#logout,[data-result]')){if(!confirm('تغییرات هنوز ذخیره نشده‌اند. از این بخش خارج شوید؟')){e.preventDefault();e.stopImmediatePropagation()}else pendingWorkspace=0}},true);
 document.addEventListener('change',e=>{if(pendingWorkspace&&e.target.id==='company'){if(!confirm('تغییرات هنوز ذخیره نشده‌اند. شرکت را تغییر دهید؟')){e.target.value=cid;e.stopImmediatePropagation()}else pendingWorkspace=0}},true);
 $('#global-search').title='جستجوی سراسری (Ctrl+K)';document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&user){e.preventDefault();$('#global-search').scrollIntoView({block:'center'});$('#global-search').focus()}});
-load().catch(e=>{$('#login-error').textContent=e.message});

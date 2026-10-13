@@ -19,12 +19,20 @@ try {
     $output = & "$install/runtime/python.exe" -I "$install/validate_payload.py" 2>&1 | Out-String
     $result.interpreter = $output.Trim()
     if ($LASTEXITCODE -ne 0) { throw "Packaged runtime validation failed: $output" }
+    $result.stage = 'branding-icon'
+    Copy-Item packaging/validate_branding.py "$install/validate_branding.py"
+    & "$install/runtime/python.exe" -I "$install/validate_branding.py"
+    if ($LASTEXITCODE -ne 0) { throw 'Native branding validation failed' }
     $data = Join-Path $env:LOCALAPPDATA 'NikanTraining'
     New-Item -ItemType Directory -Force $data | Out-Null
     Set-Content "$data/preservation-test.txt" 'keep business data'
+    $shortcut = $shell.CreateShortcut(([Environment]::GetFolderPath('Desktop') + '/Nikan Training.lnk'))
+    if ($shortcut.IconLocation -ne "$data\holding.ico,0") { throw 'Holding logo did not update desktop icon' }
     $result.stage = 'upgrade'
     $upgrade = Start-Process -FilePath "$pwd/distribution/NikanTraining-Setup.exe" -ArgumentList '/S' -Wait -PassThru
     if ($upgrade.ExitCode -ne 0 -or !(Test-Path "$data/preservation-test.txt")) { throw 'Upgrade preservation failed' }
+    $shortcut = $shell.CreateShortcut(([Environment]::GetFolderPath('Desktop') + '/Nikan Training.lnk'))
+    if ($shortcut.IconLocation -ne "$data\holding.ico,0") { throw 'Upgrade lost custom branding icon' }
     $result.stage = 'uninstall'
     $uninstall = Start-Process -FilePath "$install/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
     if ($uninstall.ExitCode -ne 0 -or !(Test-Path "$data/preservation-test.txt")) { throw 'Uninstall preservation failed' }

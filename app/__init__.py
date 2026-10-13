@@ -237,4 +237,6 @@ def create_app(data_dir=None,testing=False):
  register(app,db,authenticated,company,audit,error,validate_refs,gaps)
  from .catalog import register as register_catalog
  register_catalog(app,db,authenticated,company,audit,error,validate_refs,gaps)
+ from .branding import register as register_branding
+ register_branding(app,db,authenticated,audit,error)
  return app

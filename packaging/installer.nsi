@@ -8,6 +8,7 @@ Unicode true
 !ifndef OUTPUT
  !define OUTPUT "../distribution/NikanTraining-Setup.exe"
 !endif
+Var AppIcon
 Name "Nikan Training"
 OutFile "${OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\NikanTraining"
@@ -50,10 +51,13 @@ Section "Nikan Training" SEC_MAIN
  SetOutPath "$INSTDIR"
  File /r "${PAYLOAD}/*"
  WriteUninstaller "$INSTDIR\Uninstall.exe"
+ StrCpy $AppIcon "$INSTDIR\nikan.ico"
+ IfFileExists "$LOCALAPPDATA\NikanTraining\holding.ico" 0 +2
+ StrCpy $AppIcon "$LOCALAPPDATA\NikanTraining\holding.ico"
  CreateDirectory "$SMPROGRAMS\Nikan Training"
- CreateShortcut "$SMPROGRAMS\Nikan Training\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$INSTDIR\nikan.ico"
- CreateShortcut "$SMPROGRAMS\Nikan Training\Close Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\stop_desktop.py"' "$INSTDIR\nikan.ico"
- CreateShortcut "$DESKTOP\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$INSTDIR\nikan.ico"
+ CreateShortcut "$SMPROGRAMS\Nikan Training\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$AppIcon"
+ CreateShortcut "$SMPROGRAMS\Nikan Training\Close Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\stop_desktop.py"' "$AppIcon"
+ CreateShortcut "$DESKTOP\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$AppIcon"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "DisplayName" "Nikan Training"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "DisplayVersion" "0.3.0"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "Publisher" "Nikan Holding"
