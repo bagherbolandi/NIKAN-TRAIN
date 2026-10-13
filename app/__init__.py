@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,company_id INTEGER NOT
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,user_id INTEGER,company_id INTEGER,action TEXT NOT NULL,detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY,count INTEGER NOT NULL,until REAL NOT NULL);
 '''
-FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status'],'records':['employee_id','course_id','level','score','reaction','behavior','result']}
-REQUIRED={'employees':['code','name'],'skills':['code','title'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','hours'],'records':['employee_id','course_id','level']}
+FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status'],'records':['employee_id','course_id','level','score','reaction','behavior','result'],'job_profiles':['job','department','purpose','supervisor','duties','authority','education','experience','legal','hse','equipment','revision','approved_by'],'instructors':['name','specialty','organization','qualification','rate','contact'],'needs':['skill_id','department','reason','priority','year','status','decision']}
+REQUIRED={'employees':['code','name'],'skills':['code','title'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','hours'],'records':['employee_id','course_id','level'],'job_profiles':['job'],'instructors':['name'],'needs':['skill_id','reason','year']}
 
 def create_app(data_dir=None,testing=False):
  app=Flask(__name__,static_folder='static'); app.config.update(TESTING=testing,MAX_CONTENT_LENGTH=16*1024*1024,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',PERMANENT_SESSION_LIFETIME=1800)
@@ -96,7 +96,14 @@ def create_app(data_dir=None,testing=False):
  @authenticated
  def me():
   cs=db().execute('SELECT * FROM companies'+(' WHERE id=?' if g.user['role']!='admin' else ''),((g.user['company_id'],) if g.user['role']!='admin' else ())).fetchall()
-  return jsonify(username=g.user['username'],role=g.user['role'],csrf=session['csrf'],companies=[dict(c) for c in cs])
+  return jsonify(username=g.user['username'],role=g.user['role'],csrf=session['csrf'],desktop=bool(app.config.get('DESKTOP_STOP')),companies=[dict(c) for c in cs])
+ @app.post('/api/desktop-exit')
+ @authenticated
+ def desktop_exit():
+  stop=app.config.get('DESKTOP_STOP')
+  if not stop:return error('اجرا در حالت دسکتاپ نیست',400)
+  import threading
+  threading.Timer(.5,stop).start();return jsonify(ok=True)
  @app.post('/api/logout')
  @authenticated
  def logout():session.clear();return jsonify(ok=True)
@@ -125,13 +132,13 @@ def create_app(data_dir=None,testing=False):
    db().execute('UPDATE users SET password=? WHERE id=?',(generate_password_hash(d['password']),uid))
   audit('update_user',target['company_id'],str(uid));db().commit();return jsonify(ok=True)
  def validate_refs(table,d,cid):
-  for field in ('level','importance','hours','cost','score','reaction','behavior','result'):
+  for field in ('level','importance','hours','cost','score','reaction','behavior','result','rate','priority','year'):
    if field in d and d[field] is not None:
     try:
      value=float(d[field])
      if not math.isfinite(value):raise ValueError()
     except (ValueError,TypeError):raise ValueError('مقدار عددی نامعتبر است')
-    if field in ('level','importance') and value != int(value):raise ValueError('سطح و اهمیت باید عدد صحیح باشند')
+    if field in ('level','importance','priority','year') and value != int(value):raise ValueError('سطح و اهمیت باید عدد صحیح باشند')
   if 'date' in d:
    d['date']=str(d['date']).translate(str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩','01234567890123456789'))
    if not re.fullmatch(r'1[34]\d{2}/(0[1-9]|1[0-2])/(0[1-9]|[12]\d|3[01])',d['date']):raise ValueError('تاریخ شمسی با قالب 1405/03/25 وارد شود')
@@ -210,4 +217,6 @@ def create_app(data_dir=None,testing=False):
   except (ValueError,sqlite3.IntegrityError):raise
   except Exception:raise ValueError('ساختار فایل اکسل معتبر نیست')
   audit('import',cid,json.dumps(result));db().commit();return jsonify(result)
+ from .professional import register
+ register(app,db,authenticated,company,audit,error,validate_refs,gaps)
  return app

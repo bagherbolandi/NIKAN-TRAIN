@@ -12,6 +12,13 @@ def check(base):
   assert not page.locator('#login').is_visible()
   assert page.locator('#company option').count()==6
   page.locator('[data-page=employees]').click();page.locator('#add').click();page.locator('#entry [name=code]').fill('E001');page.locator('#entry [name=name]').fill('کاربر آزمایشی');page.locator('#entry [name=job]').fill('کارشناس آموزش');page.locator('#entry button').last.click();page.locator('#table').get_by_text('کاربر آزمایشی').wait_for()
+  page.locator('[data-page=bank]').click();page.locator('#adopt-bank').click();page.locator('#notice').filter(has_text='فعال شد').wait_for()
+  page.locator('[data-page=passports]').click();page.locator('#person').select_option(index=1);page.locator('#approved-job').wait_for();page.locator('#approved-job').select_option(label='مدیر کارخانه');page.locator('#approve-job').click();page.locator('.passport-heading .pill').filter(has_text='تأییدشده').wait_for();assert page.locator('#passport table tbody tr').count()>100
+  page.screenshot(path=os.environ.get('NIKAN_PASSPORT_SCREENSHOT','/tmp/nikan-passport.png'),full_page=True)
+  page.locator('[data-page=certificates]').click();page.locator('#certificate-form [name=title]').fill('گواهینامه ایمنی');page.locator('#certificate-form [name=file]').set_input_files({'name':'certificate.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4\nTest\n%%EOF'});page.locator('#certificate-form button').click();page.locator('#notice').filter(has_text='بایگانی شد').wait_for()
+  with page.expect_download() as info:page.locator('[data-cert]').click()
+  assert Path(info.value.path()).read_bytes().startswith(b'%PDF-')
+  page.locator('[data-page=employees]').click()
   page.locator('#company').select_option('2');page.locator('.empty').wait_for();assert page.locator('#table').get_by_text('کاربر آزمایشی').count()==0
   page.locator('#company').select_option('1');page.locator('[data-page=dashboard]').click();page.locator('.metrics').wait_for();page.screenshot(path=os.environ.get('NIKAN_SCREENSHOT','/tmp/nikan-dashboard.png'),full_page=True)
   page.locator('[data-page=courses]').click();page.locator('.month-card').first.wait_for();assert page.locator('.month-card').count()==12
