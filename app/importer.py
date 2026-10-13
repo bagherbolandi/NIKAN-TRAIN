@@ -1,7 +1,7 @@
 import zipfile
 import openpyxl
 LEVELS={'I':1,'L':2,'U':3,'O':4}
-def import_workbook(db,file,cid,personnel=False):
+def import_workbook(db,file,cid,personnel=False,allow_new=True):
  # Reject oversized expanded ZIPs before XML processing.
  with zipfile.ZipFile(file) as z:
   if sum(x.file_size for x in z.infolist())>100*1024*1024:raise ValueError('حجم بازشده فایل بیش از حد مجاز است')
@@ -10,10 +10,18 @@ def import_workbook(db,file,cid,personnel=False):
  result={'skills':0,'requirements':0,'employees':0,'assessments':0,'job_profiles':0,'employee_metadata':0}
  try:
   db.execute('SAVEPOINT excel_import')
+  from .catalog import ensure_links,attach
+  ensure_links(db,allow_new)
+  skills={}
   for row in w['کاتالوگ_مهارت'].iter_rows(min_row=6,values_only=True):
    if not row[1] or not row[2]:continue
-   c=db.execute('INSERT OR IGNORE INTO skills(company_id,code,title,category,importance) VALUES (?,?,?,?,?)',(cid,str(row[1]),str(row[2]),str(row[3] or ''),int(row[4] or 1)));result['skills']+=c.rowcount
-  skills={r['code']:r['id'] for r in db.execute('SELECT id,code FROM skills WHERE company_id=?',(cid,))}
+   code=str(row[1]);bank=db.execute('SELECT 1 FROM holding_competencies WHERE code=?',(code,)).fetchone()
+   if not bank:
+    if not allow_new:raise ValueError('شایستگی جدید باید توسط مدیر هلدینگ در بانک مشترک تعریف شود')
+    db.execute('INSERT INTO holding_competencies(code,title,category,importance,method,reference) VALUES (?,?,?,?,?,?)',(code,str(row[2]),str(row[3] or ''),int(row[4] or 1),str(row[5] or ''),str(row[6] or '')))
+   before=db.execute('SELECT count(*) FROM skills WHERE company_id=?',(cid,)).fetchone()[0]
+   skills[code]=attach(db,cid,code)
+   result['skills']+=db.execute('SELECT count(*) FROM skills WHERE company_id=?',(cid,)).fetchone()[0]-before
   s=w['شناسنامه_شغل'];jobs=next(s.iter_rows(min_row=4,max_row=4,values_only=True))
   for row in s.iter_rows(min_row=16,values_only=True):
    sid=skills.get(str(row[1]))

@@ -22,7 +22,7 @@
     "run.py": "2825262fab6be910113617a422d5e7ec7eec0f68c5d6cd767b523ed7b9773c50",
     "stop_desktop.py": "a645e7136106cb200f543e45b33adbd75367e40dfe64e3f30c42e618d36590f7",
     "nikan.ico": "f47b0e5a79af77b27c16b3489167b606da0a245f80d611c76318ab0dfd19ce78",
-    "README.md": "4869ae6f67ce7a67b339accaa8bfebf1acb7e166d1ab75ebb36fa33e3993a895",
+    "README.md": "636b76c11118a53f251150c1673fe308981ed2f05eca4777420e711826fd6f87",
     "resources/workbook.xlsx": "be5289c21246a9dee0e229b9b6c789c89d46dc76c46b18e6cdb6b065837d73f8",
     "runtime/python313.dll": "3b29bf9ff39bed8f660f5b935f19657f7ce7f145009851741b11364f6ebcb862",
     "runtime/python3.dll": "a1a32b2475675e784d9b34d33d3a8f3e4afaa563da1feb784b0dd69fc4d8f9dc",
@@ -31,9 +31,10 @@
     "runtime/vcruntime140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
     "runtime/LICENSE.txt": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120",
     "runtime/pythonw.exe": "435e222945e1a110559fb71b5ebff8c3d698689b5e5eee0371815c1141d72738",
-    "app/importer.py": "c12b762a1b5964502f8da63eb2a6f235e2b1547f1f6723ecb7323aeb2e084038",
-    "app/__init__.py": "0dc9e1bc1880c64355e677b32281b26f8d4697183920976f6634ccd9a111bb96",
-    "app/professional.py": "e65280114ba47e66b1c1f173cae3a22fdce2421a26023463a0701517d9617055",
+    "app/importer.py": "3c84c07842d51b0c8284927262dd47e1bc7d550cdb29adc92d1b9cca30227a3d",
+    "app/__init__.py": "4bafa6b72dd3e8950104ac8a040c17326812d93ffee62e3ff63b5da27d371f0b",
+    "app/catalog.py": "ff3b3af1d383f8e86a1cfce17670d1ea43b60471657516a698f52c95f67ffc94",
+    "app/professional.py": "6c8a88d66aa348c0c89c148008db1a7c84f86464bc20d29922b29e3442fcacbc",
     "runtime/libs/python313.lib": "dc0393b1fb215eb5927eedbe2cdb5746073d93d75392c4b0072a48d8c0bd1c17",
     "runtime/libs/python3.lib": "218b31a6dedd733cdfe8ba0182cea477a6e150a02bda3deda08a261b3ef5d571",
     "runtime/DLLs/_ctypes.pyd": "5bcddf4c374c4d247e1e4a61f3347159c36c5785fe43bdae11a4e6c9ea2c0166",
@@ -1781,9 +1782,10 @@
     "runtime/include/internal/mimalloc/mimalloc/prim.h": "f41d6d66db0199a65c1720670947ef548e50e2d0b85b640a630c81e4f1502c81",
     "runtime/include/internal/mimalloc/mimalloc/types.h": "068dee34b03ec849438c01903518bad2f1970f4159410c0261ebf49403a0a280",
     "runtime/include/internal/mimalloc/mimalloc/track.h": "d94934f0ec924e9d91595823fbe740968fec7aed72f54437cd887ec19111ff60",
-    "app/static/index.html": "9e3067a2d43e5b94f6cf0af2e215441111f3c447babcce6a67099074dca6f361",
-    "app/static/professional.js": "86006ed88f80066537ee8787db987683ba3b1f54ef6310cbadaba930581393e1",
-    "app/static/app.js": "0b59b1314850890bd86438263b7eff3d7b838c5bdbae152cc891fc346f19323c",
-    "app/static/style.css": "38b6d69235b4f154de0e2d4b4787c0953a802be0ccf8fb5bbd9a4109b454768f"
+    "app/static/workspaces.js": "5bc2d54b93da12a5a70c140486bd784bcc86f1116fb7fea1f86ae3c7b80f5fa9",
+    "app/static/index.html": "db94d4a8011f60a2adc383a430efd94b31b6a09b8a41617fdb7c353a6e11dd8b",
+    "app/static/professional.js": "fb19e52a93396a5879b034fffb7261b1bb2e3c588ed5e199ad80cb4426e0b2a9",
+    "app/static/app.js": "930e7c7ffa714a21ff3c1514eb70ee1cd0e064c1e930d735f83b9bb7fa5d42da",
+    "app/static/style.css": "a23254b2a4da50602eefcfcbf7377dcd575dd995e0a8854b9b4df6046b453fed"
   }
 }

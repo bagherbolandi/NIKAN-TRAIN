@@ -151,18 +151,30 @@ def create_app(data_dir=None,testing=False):
  def data(table):
   if table not in FIELDS:return error('بخش یافت نشد',404)
   cid=company()
+  if table=='skills' and request.method=='GET':
+   from .catalog import rows
+   return jsonify(rows(db(),cid))
+  if table=='skills' and g.user['role']!='admin':raise PermissionError()
   if request.method=='GET':return jsonify([dict(r) for r in db().execute(f'SELECT * FROM {table} WHERE company_id=? ORDER BY id DESC',(cid,))])
   if g.user['role']=='viewer':raise PermissionError()
   d=request.get_json() or {};d={k:v for k,v in d.items() if k in FIELDS[table]}
   if any(d.get(k) in (None,'') for k in REQUIRED[table]):return error('فیلدهای الزامی را تکمیل کنید')
   validate_refs(table,d,cid)
+  if table=='skills':
+   bank=db().execute('SELECT title FROM holding_competencies WHERE code=?',(d['code'],)).fetchone()
+   if bank and bank['title'].strip()!=str(d['title']).strip():raise ValueError('این کد در بانک مشترک وجود دارد؛ عنوان آن را از بانک هلدینگ ویرایش کنید')
   keys=list(d);cols=','.join(['company_id']+keys);params=','.join('?' for _ in range(len(keys)+1))
-  cur=db().execute(f'INSERT INTO {table} ({cols}) VALUES ({params})',[cid]+[d[k] for k in keys]);audit('create_'+table,cid,str(cur.lastrowid));db().commit();return jsonify(id=cur.lastrowid),201
+  cur=db().execute(f'INSERT INTO {table} ({cols}) VALUES ({params})',[cid]+[d[k] for k in keys]);rid=cur.lastrowid
+  if table=='skills':
+   from .catalog import ensure_links
+   ensure_links(db())
+  audit('create_'+table,cid,str(rid));db().commit();return jsonify(id=rid),201
  @app.route('/api/data/<table>/<int:rid>',methods=['PUT','DELETE'])
  @authenticated
  def modify(table,rid):
   if table not in FIELDS:return error('بخش یافت نشد',404)
   cid=company()
+  if table=='skills':return error('شایستگی مشترک را از بانک هلدینگ ویرایش کنید',400)
   if g.user['role']=='viewer':raise PermissionError()
   if not db().execute(f'SELECT 1 FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone():return error('رکورد یافت نشد',404)
   if request.method=='DELETE':db().execute(f'DELETE FROM {table} WHERE id=? AND company_id=?',(rid,cid))
@@ -173,7 +185,7 @@ def create_app(data_dir=None,testing=False):
    validate_refs(table,d,cid);db().execute(f"UPDATE {table} SET {','.join(k+'=?' for k in d)} WHERE id=? AND company_id=?",list(d.values())+[rid,cid])
   audit(request.method+'_'+table,cid,str(rid));db().commit();return jsonify(ok=True)
  def gaps(cid):
-  rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,s.title,s.importance,r.level required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0)) current FROM employees e JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job JOIN skills s ON s.id=r.skill_id LEFT JOIN assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
+  rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,b.title,b.importance,r.level required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0)) current FROM employees e JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job JOIN skills s ON s.id=r.skill_id JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
   return [dict(r,gap=r['required']-r['current']) for r in rows if r['required']>r['current']]
  @app.get('/api/gaps')
  @authenticated
@@ -215,10 +227,14 @@ def create_app(data_dir=None,testing=False):
   from .importer import import_workbook
   f=request.files.get('file')
   if not f:raise ValueError('فایل اکسل را انتخاب کنید')
-  try:result=import_workbook(db(),f,cid,request.form.get('personnel')=='yes')
+  try:result=import_workbook(db(),f,cid,request.form.get('personnel')=='yes',g.user['role']=='admin')
   except (ValueError,sqlite3.IntegrityError):raise
   except Exception:raise ValueError('ساختار فایل اکسل معتبر نیست')
+  from .catalog import ensure_links
+  ensure_links(db(),g.user['role']=='admin')
   audit('import',cid,json.dumps(result));db().commit();return jsonify(result)
  from .professional import register
  register(app,db,authenticated,company,audit,error,validate_refs,gaps)
+ from .catalog import register as register_catalog
+ register_catalog(app,db,authenticated,company,audit,error,validate_refs,gaps)
  return app

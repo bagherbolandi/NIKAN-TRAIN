@@ -40,12 +40,16 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  def adopt():
   cid=company()
   if g.user['role']=='viewer':raise PermissionError()
-  db().execute('INSERT OR IGNORE INTO skills(company_id,code,title,category,importance) SELECT ?,code,title,category,importance FROM holding_competencies',(cid,))
+  from .catalog import ensure_links,attach
+  ensure_links(db(),g.user['role']=='admin')
+  for bank in db().execute('SELECT code FROM holding_competencies').fetchall():attach(db(),cid,bank['code'])
   base=Path(__file__).resolve().parents[1];paths=list(base.glob('*.xlsx'))+[base/'resources'/'workbook.xlsx'];path=next((p for p in paths if p.exists()),None)
   result={}
   if path:
    from .importer import import_workbook
-   with path.open('rb') as f:result=import_workbook(db(),f,cid,False)
+   with path.open('rb') as f:result=import_workbook(db(),f,cid,False,g.user['role']=='admin')
+  from .catalog import ensure_links
+  ensure_links(db(),g.user['role']=='admin')
   audit('adopt_holding_catalog',cid);db().commit();return jsonify(ok=True,imported=result)
  @app.get('/api/passports/<int:eid>')
  @authenticated
@@ -53,7 +57,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   cid=company();e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   job=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,e['job'])).fetchone();meta=db().execute('SELECT * FROM employee_meta WHERE employee_id=? AND company_id=?',(eid,cid)).fetchone()
-  matrix=db().execute('''SELECT s.id,s.code,s.title,s.category,COALESCE(r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0)) current FROM skills s LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL) ORDER BY s.category,s.code''',(eid,cid,e['job'],eid,cid)).fetchall()
+  matrix=db().execute('''SELECT s.id,b.code,b.title,b.category,COALESCE(r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0)) current FROM skills s JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL) ORDER BY b.category,b.code''',(eid,cid,e['job'],eid,cid)).fetchall()
   records=db().execute('SELECT t.*,c.title,c.date,c.status FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=?',(eid,cid)).fetchall()
   certs=db().execute('SELECT id,title,issuer,issued,expires,filename FROM certificates WHERE employee_id=? AND company_id=?',(eid,cid)).fetchall()
   related=[r['id'] for r in matrix if r['required']>r['current']]
