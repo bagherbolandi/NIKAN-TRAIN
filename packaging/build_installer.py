@@ -33,7 +33,7 @@ def stage(cache,payload):
     if '..' in Path(name).parts or Path(name).is_absolute():raise RuntimeError('Unsafe wheel path')
     target=site/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(z.read(name))
  shutil.copytree(ROOT/'app',payload/'app',ignore=shutil.ignore_patterns('__pycache__'))
- for name in ['desktop.py','run.py','README.md','requirements.txt']:shutil.copy2(ROOT/name,payload/name)
+ for name in ['desktop.py','stop_desktop.py','run.py','README.md','requirements.txt']:shutil.copy2(ROOT/name,payload/name)
  shutil.copy2(ROOT/'packaging'/'nikan.ico',payload/'nikan.ico')
  (payload/'resources').mkdir();shutil.copy2(next(ROOT.glob('*.xlsx')),payload/'resources'/'workbook.xlsx')
  manifest={'python':{'url':PYTHON_URL,'sha512_base64':PYTHON_SHA512},'wheels':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(wheels.glob('*.whl'))},'files':{str(p.relative_to(payload)):hashlib.sha256(p.read_bytes()).hexdigest() for p in payload.rglob('*') if p.is_file()}}

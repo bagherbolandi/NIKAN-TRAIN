@@ -17,11 +17,12 @@
     "werkzeug-3.1.9-py3-none-any.whl": "6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab"
   },
   "files": {
-    "desktop.py": "d075c8ed580592bc26bf4851b7ca409465ee49df7e9fb6b40e86d76291fd3f65",
+    "desktop.py": "13168fa171cbe6dba13e718a76bddfa2349341b7dc9576afff6a3077abb374b9",
     "requirements.txt": "4cc1501d98ae47add68ca32cc3286a23042d102633f67de2bca4437b11d9e9e2",
     "run.py": "2825262fab6be910113617a422d5e7ec7eec0f68c5d6cd767b523ed7b9773c50",
+    "stop_desktop.py": "a645e7136106cb200f543e45b33adbd75367e40dfe64e3f30c42e618d36590f7",
     "nikan.ico": "f47b0e5a79af77b27c16b3489167b606da0a245f80d611c76318ab0dfd19ce78",
-    "README.md": "d6ec94b7485de51262389181b1974869414a51caed8ea880b3e1473eb0dcefdc",
+    "README.md": "4869ae6f67ce7a67b339accaa8bfebf1acb7e166d1ab75ebb36fa33e3993a895",
     "resources/workbook.xlsx": "be5289c21246a9dee0e229b9b6c789c89d46dc76c46b18e6cdb6b065837d73f8",
     "runtime/python313.dll": "3b29bf9ff39bed8f660f5b935f19657f7ce7f145009851741b11364f6ebcb862",
     "runtime/python3.dll": "a1a32b2475675e784d9b34d33d3a8f3e4afaa563da1feb784b0dd69fc4d8f9dc",

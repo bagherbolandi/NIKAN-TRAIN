@@ -52,9 +52,10 @@ Section "Nikan Training" SEC_MAIN
  WriteUninstaller "$INSTDIR\Uninstall.exe"
  CreateDirectory "$SMPROGRAMS\Nikan Training"
  CreateShortcut "$SMPROGRAMS\Nikan Training\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$INSTDIR\nikan.ico"
+ CreateShortcut "$SMPROGRAMS\Nikan Training\Close Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\stop_desktop.py"' "$INSTDIR\nikan.ico"
  CreateShortcut "$DESKTOP\Nikan Training.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop.py"' "$INSTDIR\nikan.ico"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "DisplayName" "Nikan Training"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "DisplayVersion" "0.2.0"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "DisplayVersion" "0.2.1"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "Publisher" "Nikan Holding"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTraining" "InstallLocation" "$INSTDIR"
