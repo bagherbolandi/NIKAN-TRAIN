@@ -21,6 +21,9 @@ def run(root):
   log=RotatingFileHandler(root/'server.log',maxBytes=2*1024*1024,backupCount=5,encoding='utf-8')
   log.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'));logging.getLogger().addHandler(log);logging.getLogger().setLevel(logging.INFO)
   server=Server((config['host'],config['port']),app,numthreads=config.get('threads',16),request_queue_size=100,timeout=30)
+  from network.http import CompleteConnection
+  server.ConnectionClass=CompleteConnection
+  server.max_request_body_size=16*1024*1024
   adapter=BuiltinSSLAdapter(config['certificate'],config['private_key'])
   import ssl
   adapter.context.minimum_version=ssl.TLSVersion.TLSv1_2

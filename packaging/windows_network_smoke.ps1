@@ -43,7 +43,10 @@ try {
  if (Get-ScheduledTask -TaskName 'NikanTrainingServer' -ErrorAction SilentlyContinue) { throw 'Uninstall left scheduled task' }
  $result.status='passed';$result.stage='completed'
 } catch {
- $result.status='failed';$result.details=$_.Exception.Message;throw
+ $result.status='failed';$result.details=$_.Exception.Message
+ if (Test-Path "$root/server.log") { $result.server_log=(Get-Content "$root/server.log" -Tail 40) -join "`n" }
+ if (Get-ScheduledTask -TaskName 'NikanTrainingServer' -ErrorAction SilentlyContinue) { $result.task=(Get-ScheduledTaskInfo -TaskName 'NikanTrainingServer' | Select-Object LastTaskResult,LastRunTime | ConvertTo-Json -Compress) }
+ throw
 } finally {
  New-Item -ItemType Directory -Force docs | Out-Null
  $result | ConvertTo-Json | Set-Content docs/windows-network-result.json -Encoding UTF8

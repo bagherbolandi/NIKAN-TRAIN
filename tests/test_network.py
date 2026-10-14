@@ -94,3 +94,22 @@ def test_failed_status_write_releases_backup_lock(central,monkeypatch):
  assert not m.gate.locked();assert 'Disk full' in m.state()['error'];assert not m.state()['running']
  monkeypatch.setattr(module,'write_json',original)
  assert m.run();assert not m.state()['error']
+
+def test_background_job_is_reserved_before_acceptance(central,monkeypatch):
+ import threading
+ import network.backup as module
+ root,app,m,c,h,e=central;name=m.run();release=threading.Event();finished=threading.Event();original=module.recovery_check
+ def controlled(*args):
+  assert release.wait(5)
+  try:return original(*args)
+  finally:finished.set()
+ monkeypatch.setattr(module,'recovery_check',controlled)
+ m.background(m.verify,name)
+ try:
+  assert m.state()['running']
+  with pytest.raises(ValueError):m.background(m.verify,name)
+ finally:release.set()
+ assert finished.wait(5)
+ deadline=time.monotonic()+5
+ while m.gate.locked() and time.monotonic()<deadline:time.sleep(.01)
+ assert not m.state()['running'];assert m.state()['recovery_test']['verified']

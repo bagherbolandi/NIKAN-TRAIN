@@ -31,9 +31,12 @@ def validate(install,root):
  admin.request('/api/users',dict(username='manager1',password=password,role='manager',company_id=1));admin.request('/api/users',dict(username='manager2',password=password,role='manager',company_id=2))
  manager=Client();manager.login('manager2',password)
  try:manager.request('/api/data/employees?company_id=1');raise AssertionError('Company isolation failed')
- except urllib.error.HTTPError as exc:assert exc.code==403
+ except urllib.error.HTTPError as exc:assert exc.code==403;assert json.loads(exc.read())['error']
  try:manager.request('/api/network/recovery-key');raise AssertionError('Recovery key exposed')
- except urllib.error.HTTPError as exc:assert exc.code==403
+ except urllib.error.HTTPError as exc:assert exc.code==403;assert json.loads(exc.read())['error']
+ # An early authorization response must also arrive intact with an unread POST body.
+ try:manager.request('/api/network/backups',{'unused':'body'},'POST');raise AssertionError('Backup permission bypass')
+ except urllib.error.HTTPError as exc:assert exc.code==403;assert json.loads(exc.read())['error']
  def worker(index):
   c=Client();c.login('manager1',password);result=c.request('/api/data/employees?company_id=1',dict(code=f'NET-{index:03d}',name=f'Network person {index}'));assert result['id'];return result
  # Actual separate HTTPS connections write to the same central database.

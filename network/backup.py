@@ -87,13 +87,14 @@ class BackupManager:
   self.settings_path=self.root/'backup-settings.json';self.state_path=self.root/'backup-status.json'
   if not self.settings_path.exists():write_json(self.settings_path,dict(enabled=True,time='02:00',retain=30,mirror='',timezone='Asia/Tehran'))
   self.local=self.root/'backups';self.local.mkdir(exist_ok=True)
-  state=self.state()
+  state=read_json(self.state_path,{})
   if state.get('running'):
    state.update(running=False,error='عملیات قبلی ناتمام مانده است؛ پشتیبان کامل قبلی حفظ شده است');write_json(self.state_path,state)
  def settings(self):return read_json(self.settings_path)
  def state(self):
   state=read_json(self.state_path,{})
-  if self.runtime_error:state.update(error=self.runtime_error,running=self.gate.locked())
+  state['running']=self.gate.locked()
+  if self.runtime_error:state.update(error=self.runtime_error)
   return state
  def configure(self,data):
   if not isinstance(data,dict) or type(data.get('enabled')) is not bool or not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',str(data.get('time',''))) or type(data.get('retain')) is not int or not 2<=data['retain']<=365:raise ValueError('زمان و تعداد نسخه‌های پشتیبان معتبر نیست')
@@ -117,8 +118,8 @@ class BackupManager:
   path=self.local/name
   if not path.is_file():raise ValueError('پشتیبان یافت نشد')
   return path
- def run(self,reason='manual'):
-  if not self.gate.acquire(blocking=False):raise ValueError('عملیات پشتیبان یا آزمون بازیابی در حال اجراست')
+ def run(self,reason='manual',_locked=False):
+  if not _locked and not self.gate.acquire(blocking=False):raise ValueError('عملیات پشتیبان یا آزمون بازیابی در حال اجراست')
   state=self.state();state.update(running=True,operation='backup',started=datetime.now(timezone.utc).isoformat(),error='',mirror_error='');self.runtime_error=''
   try:
    write_json(self.state_path,state)
@@ -154,8 +155,8 @@ class BackupManager:
    try:write_json(self.state_path,state)
    except OSError as exc:self.runtime_error=str(exc);logging.exception('Cannot persist backup status')
    finally:self.gate.release()
- def verify(self,name):
-  if not self.gate.acquire(blocking=False):raise ValueError('عملیات دیگری در حال اجراست')
+ def verify(self,name,_locked=False):
+  if not _locked and not self.gate.acquire(blocking=False):raise ValueError('عملیات دیگری در حال اجراست')
   state=self.state();state.update(running=True,operation='verify',error='');self.runtime_error=''
   try:
    write_json(self.state_path,state)
@@ -185,11 +186,12 @@ class BackupManager:
   last=datetime.fromisoformat(state['last_success']).astimezone(TEHRAN)
   return now.strftime('%H:%M')>=settings['time'] and last.date()<now.date()
  def background(self,operation,*args):
-  if self.gate.locked():raise ValueError('عملیات دیگری در حال اجراست')
+  if not self.gate.acquire(blocking=False):raise ValueError('عملیات دیگری در حال اجراست')
   def job():
-   try:operation(*args)
+   try:operation(*args,_locked=True)
    except Exception:logging.exception('Backup/recovery operation failed')
-  threading.Thread(target=job,daemon=True).start()
+  try:threading.Thread(target=job,daemon=True).start()
+  except BaseException:self.gate.release();raise
  def start(self):
   def schedule():
    while not self.stop_event.is_set():

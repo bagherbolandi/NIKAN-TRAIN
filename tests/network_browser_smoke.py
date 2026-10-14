@@ -5,7 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from network.config import initialize
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright,expect
 
 def main():
  with tempfile.TemporaryDirectory() as folder:
@@ -25,8 +25,8 @@ def main():
     browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--ignore-certificate-errors-spki-list='+pin]);page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto(base);page.locator('#auth [name=username]').fill('network-admin');page.locator('#auth [name=password]').fill(secrets.token_urlsafe(24));page.locator('#auth button').click();page.locator('.metrics').wait_for();page.locator('[data-page=backup]').click();page.locator('#backup-settings').wait_for()
     page.locator('#backup-settings [name=mirror]').fill(str(share));page.locator('#backup-settings [name=retain]').fill('3');page.locator('#backup-settings button').click();page.locator('#notice').filter(has_text='تأیید شد').wait_for()
-    page.locator('#backup-now').wait_for(state='visible');page.wait_for_function("!document.querySelector('#backup-now').disabled");page.locator('#backup-now').click();page.locator('[data-backup-download]').first.wait_for()
-    page.wait_for_function("!document.querySelector('#backup-now').disabled");page.locator('[data-backup-test]').first.click();page.locator('#backup-state').filter(has_text='آزمون انتخابی بازیابی: nikan-').wait_for()
+    page.locator('#backup-now').wait_for(state='visible');expect(page.locator('#backup-now')).to_be_enabled(timeout=30000);page.locator('#backup-now').click();page.locator('[data-backup-download]').first.wait_for()
+    expect(page.locator('#backup-now')).to_be_enabled(timeout=30000);page.locator('[data-backup-test]').first.click();page.locator('#backup-state').filter(has_text='آزمون انتخابی بازیابی: nikan-').wait_for()
     with page.expect_download() as info:page.locator('#recovery-key').click()
     assert Path(info.value.path()).read_bytes()==(root/'keys/recovery.key').read_bytes()
     with page.expect_download() as info:page.locator('[data-backup-download]').first.click()
