@@ -1,9 +1,7 @@
 {
-  "server_log": "",
-  "status": "failed",
-  "stage": "client-install",
-  "platform": "Microsoft Windows NT 10.0.26100.0",
-  "details": "Network client install failed",
+  "details": "",
+  "stage": "completed",
   "payload": "Network payload passed: verified HTTPS, 16 concurrent writes, company isolation, encrypted backup, attachment/password/personal-document recovery, active-server protection.",
-  "task": "{\"LastTaskResult\":267009,\"LastRunTime\":\"2026-10-14T04:52:10+00:00\"}"
+  "status": "passed",
+  "platform": "Microsoft Windows NT 10.0.26100.0"
 }
