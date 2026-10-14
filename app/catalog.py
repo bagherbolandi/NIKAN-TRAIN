@@ -107,7 +107,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
    for code,level in checked:
     sid=attach(db(),cid,code);db().execute('INSERT INTO assessments(company_id,employee_id,skill_id,level) VALUES (?,?,?,?) ON CONFLICT(company_id,employee_id,skill_id) DO UPDATE SET level=excluded.level',(cid,eid,sid,level))
    audit('batch_employee_assessment',cid,str(eid));db().commit()
-  matrix=[dict(r) for r in db().execute('SELECT b.*,s.id skill_id,COALESCE(r.level,0) required,COALESCE(a.level,0) current FROM holding_competencies b LEFT JOIN competency_links l ON l.code=b.code AND l.skill_id IN (SELECT id FROM skills WHERE company_id=?) LEFT JOIN skills s ON s.id=l.skill_id LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=? AND r.job=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=? ORDER BY b.category,b.code',(cid,cid,e['job'],eid,cid))]
+  matrix=[dict(r) for r in db().execute('SELECT b.*,s.id skill_id,COALESCE(p.level,r.level,0) required,COALESCE(a.level,0) current FROM holding_competencies b LEFT JOIN competency_links l ON l.code=b.code AND l.skill_id IN (SELECT id FROM skills WHERE company_id=?) LEFT JOIN skills s ON s.id=l.skill_id LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=? AND r.job=? LEFT JOIN personal_requirements p ON p.skill_id=s.id AND p.employee_id=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=? ORDER BY b.category,b.code',(cid,cid,e['job'],eid,eid,cid))]
   return jsonify(employee=dict(e),matrix=matrix)
  @app.get('/api/needs-summary')
  @authenticated

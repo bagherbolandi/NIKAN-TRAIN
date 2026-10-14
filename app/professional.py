@@ -57,12 +57,14 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   cid=company();e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   job=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,e['job'])).fetchone();meta=db().execute('SELECT * FROM employee_meta WHERE employee_id=? AND company_id=?',(eid,cid)).fetchone()
-  matrix=db().execute('''SELECT s.id,b.code,b.title,b.category,COALESCE(r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0)) current FROM skills s JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL) ORDER BY b.category,b.code''',(eid,cid,e['job'],eid,cid)).fetchall()
+  matrix=db().execute('''SELECT s.id,b.code,b.title,b.category,COALESCE(p.level,r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0)) current FROM skills s JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN personal_requirements p ON p.skill_id=s.id AND p.employee_id=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL OR p.employee_id IS NOT NULL) ORDER BY b.category,b.code''',(eid,cid,e['job'],eid,eid,cid)).fetchall()
   records=db().execute('SELECT t.*,c.title,c.date,c.status FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=?',(eid,cid)).fetchall()
   certs=db().execute('SELECT id,title,issuer,issued,expires,filename FROM certificates WHERE employee_id=? AND company_id=?',(eid,cid)).fetchall()
   related=[r['id'] for r in matrix if r['required']>r['current']]
   plans=[dict(r) for r in db().execute("SELECT * FROM courses WHERE company_id=? AND status IN ('planned','approved')",(cid,)) if r['skill_id'] in related]
-  return jsonify(employee=dict(e),job=dict(job) if job else None,meta=dict(meta) if meta else None,matrix=[dict(r,gap=max(0,r['required']-r['current'])) for r in matrix],records=[dict(r) for r in records],certificates=[dict(r) for r in certs],idp=plans)
+  from .documents import document_view
+  document=document_view(db(),cid,eid,dict(job) if job else None)
+  return jsonify(document=document,employee=dict(e),job=document['effective'],meta=dict(meta) if meta else None,matrix=[dict(r,gap=max(0,r['required']-r['current'])) for r in matrix],records=[dict(r) for r in records],certificates=[dict(r) for r in certs],idp=plans)
  @app.put('/api/passports/<int:eid>/approval')
  @authenticated
  def approval(eid):

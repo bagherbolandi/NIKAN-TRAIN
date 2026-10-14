@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,company_id INTEGER NOT
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,user_id INTEGER,company_id INTEGER,action TEXT NOT NULL,detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY,count INTEGER NOT NULL,until REAL NOT NULL);
 '''
-FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status'],'records':['employee_id','course_id','level','score','reaction','behavior','result'],'job_profiles':['job','department','purpose','supervisor','duties','authority','education','experience','legal','hse','equipment','revision','approved_by'],'instructors':['name','specialty','organization','qualification','rate','contact'],'needs':['skill_id','department','reason','priority','year','status','decision']}
+FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status'],'records':['employee_id','course_id','level','score','reaction','behavior','result'],'job_profiles':['job','department','purpose','supervisor','duties','authority','education','experience','legal','hse','equipment','revision','approved_by','definition','commitments','conditions','performance','contract_notes','effective_date','review_date'],'instructors':['name','specialty','organization','qualification','rate','contact'],'needs':['skill_id','department','reason','priority','year','status','decision']}
 REQUIRED={'employees':['code','name'],'skills':['code','title'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','hours'],'records':['employee_id','course_id','level'],'job_profiles':['job'],'instructors':['name'],'needs':['skill_id','reason','year']}
 
 def create_app(data_dir=None,testing=False):
@@ -185,7 +185,7 @@ def create_app(data_dir=None,testing=False):
    validate_refs(table,d,cid);db().execute(f"UPDATE {table} SET {','.join(k+'=?' for k in d)} WHERE id=? AND company_id=?",list(d.values())+[rid,cid])
   audit(request.method+'_'+table,cid,str(rid));db().commit();return jsonify(ok=True)
  def gaps(cid):
-  rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,b.title,b.importance,r.level required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0)) current FROM employees e JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job JOIN skills s ON s.id=r.skill_id JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
+  rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,b.title,b.importance,COALESCE(p.level,r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0)) current FROM employees e JOIN skills s ON s.company_id=e.company_id LEFT JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job AND r.skill_id=s.id LEFT JOIN personal_requirements p ON p.employee_id=e.id AND p.skill_id=s.id JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
   return [dict(r,gap=r['required']-r['current']) for r in rows if r['required']>r['current']]
  @app.get('/api/gaps')
  @authenticated
@@ -239,4 +239,6 @@ def create_app(data_dir=None,testing=False):
  register_catalog(app,db,authenticated,company,audit,error,validate_refs,gaps)
  from .branding import register as register_branding
  register_branding(app,db,authenticated,audit,error)
+ from .documents import register as register_documents
+ register_documents(app,db,authenticated,company,audit,error,gaps)
  return app
