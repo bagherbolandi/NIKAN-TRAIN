@@ -32,13 +32,13 @@ def create_app(data_dir=None,testing=False):
   if 'db' not in g:
    g.db=sqlite3.connect(app.config['DB'],timeout=15);g.db.row_factory=sqlite3.Row;g.db.execute('PRAGMA foreign_keys=ON');g.db.execute('PRAGMA journal_mode=WAL')
   return g.db
- with app.app_context():
-  db().executescript(SCHEMA)
-  db().executemany('INSERT OR IGNORE INTO companies(name) VALUES (?)',[(n,) for n in COMPANIES]);db().commit()
  @app.teardown_appcontext
  def close(_):
   c=g.pop('db',None)
   if c:c.close()
+ with app.app_context():
+  db().executescript(SCHEMA)
+  db().executemany('INSERT OR IGNORE INTO companies(name) VALUES (?)',[(n,) for n in COMPANIES]);db().commit()
  def error(message,status=400):return jsonify(error=message),status
  @app.before_request
  def same_origin():

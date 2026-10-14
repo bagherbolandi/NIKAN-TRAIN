@@ -113,3 +113,27 @@ def test_background_job_is_reserved_before_acceptance(central,monkeypatch):
  deadline=time.monotonic()+5
  while m.gate.locked() and time.monotonic()<deadline:time.sleep(.01)
  assert not m.state()['running'];assert m.state()['recovery_test']['verified']
+
+def test_all_factory_connections_close_without_garbage_collection(tmp_path,monkeypatch):
+ import app as module
+ real=sqlite3.connect;connections=[]
+ class TrackedConnection(sqlite3.Connection):
+  explicitly_closed=False
+  def close(self):self.explicitly_closed=True;return super().close()
+ def connect(*args,**kwargs):
+  kwargs['factory']=TrackedConnection
+  conn=real(*args,**kwargs);connections.append(conn);return conn
+ monkeypatch.setattr(module.sqlite3,'connect',connect)
+ # Strong references keep every connection alive, so garbage collection cannot mask a leak.
+ app=create_app(tmp_path/'factory',True)
+ assert connections and all(c.explicitly_closed for c in connections)
+ assert app.test_client().get('/api/status').status_code==200
+ assert all(c.explicitly_closed for c in connections)
+
+def test_recovery_validation_does_not_change_desktop_icons(central,monkeypatch):
+ import app.branding as branding
+ root,app,m,c,h,e=central
+ conn=sqlite3.connect(root/'nikan.sqlite3');conn.execute("UPDATE branding SET icon=? WHERE key='holding'",(b'\x89PNG\r\n\x1a\nbackup-icon',));conn.commit();conn.close()
+ def forbidden(*args):raise AssertionError('A recovery test must not modify live desktop shortcuts')
+ monkeypatch.setattr(branding,'write_icon',forbidden)
+ name=m.run();assert m.verify(name)['verified']

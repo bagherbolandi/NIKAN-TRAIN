@@ -104,7 +104,7 @@ Section "Uninstall"
  ${If} $0 != 0
   Abort "Server must stop cleanly before uninstalling."
  ${EndIf}
- nsExec::ExecToLog 'powershell.exe -NoProfile -Command "Unregister-ScheduledTask -TaskName NikanTrainingServer -Confirm:$false; Get-NetFirewallRule -Name NikanTrainingHTTPS -ErrorAction SilentlyContinue | Remove-NetFirewallRule"'
+ nsExec::ExecToLog 'powershell.exe -NoProfile -Command "Unregister-ScheduledTask -TaskName NikanTrainingServer -Confirm:$$false; Get-NetFirewallRule -Name NikanTrainingHTTPS -ErrorAction SilentlyContinue | Remove-NetFirewallRule"'
  Pop $0
  SetShellVarContext all
  Delete "$DESKTOP\Nikan Training Network.url"

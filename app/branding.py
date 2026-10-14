@@ -31,7 +31,7 @@ def register(app,db,authenticated,audit,error):
  with app.app_context():
   db().executescript(SCHEMA)
   r=db().execute("SELECT icon FROM branding WHERE key='holding'").fetchone()
-  if r and r['icon']:
+  if r and r['icon'] and not app.testing:
    try:write_icon(r['icon'],root)
    except (OSError,subprocess.SubprocessError):app.logger.warning('Shortcut logo refresh unavailable; continuing startup',exc_info=True)
  @app.get('/api/branding')
