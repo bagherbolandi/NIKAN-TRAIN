@@ -31,11 +31,15 @@ try {
  $result.stage='client-install'
  $url="https://$($config.hostname):$($config.port)"
  $p=Start-Process "$pwd/distribution/NikanTraining-Network-Client-Setup.exe" -ArgumentList @('/S',"/URL=$url") -Wait -PassThru
- if ($p.ExitCode -ne 0) { throw 'Network client install failed' }
+ if ($p.ExitCode -ne 0) { throw "Network client install failed (exit $($p.ExitCode), URL $url)" }
  $shortcut=Join-Path ([Environment]::GetFolderPath('Desktop')) 'Nikan Training Network.url'
  if (!(Test-Path $shortcut) -or !(Select-String -Path $shortcut -SimpleMatch "URL=$url")) { throw 'Wrong client shortcut target' }
  $p=Start-Process "$env:LOCALAPPDATA/Programs/NikanTrainingNetworkClient/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
  if ($p.ExitCode -ne 0) { throw 'Network client uninstall failed' }
+ $p=Start-Process "$pwd/distribution/NikanTraining-Network-Client-Setup.exe" -ArgumentList @('/S',("/URL=`""+$url+"`"")) -Wait -PassThru
+ if ($p.ExitCode -ne 0 -or !(Select-String -Path $shortcut -SimpleMatch "URL=$url")) { throw 'Quoted client URL install failed' }
+ $p=Start-Process "$env:LOCALAPPDATA/Programs/NikanTrainingNetworkClient/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
+ if ($p.ExitCode -ne 0) { throw 'Quoted client uninstall failed' }
  $result.stage='server-uninstall'
  $p=Start-Process "$install/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
  if ($p.ExitCode -ne 0) { throw 'Server uninstall failed' }

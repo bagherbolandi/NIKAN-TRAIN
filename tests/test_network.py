@@ -137,3 +137,16 @@ def test_recovery_validation_does_not_change_desktop_icons(central,monkeypatch):
  def forbidden(*args):raise AssertionError('A recovery test must not modify live desktop shortcuts')
  monkeypatch.setattr(branding,'write_icon',forbidden)
  name=m.run();assert m.verify(name)['verified']
+
+def test_recovery_key_write_failure_keeps_current_database(central,monkeypatch):
+ import recovery as module
+ root,app,m,c,h,e=central;archive=m.selected(m.run())
+ conn=sqlite3.connect(root/'nikan.sqlite3');conn.execute("INSERT INTO employees(company_id,code,name) VALUES (1,'LIVE','Live record after backup')");conn.commit();conn.close();before=digest(root/'nikan.sqlite3')
+ original=module.atomic_write
+ def fail(path,data):
+  if Path(path).name=='session.key':raise OSError('Recovery disk failure simulation')
+  return original(path,data)
+ monkeypatch.setattr(module,'atomic_write',fail)
+ with pytest.raises(OSError):restore(archive,root/'keys/recovery.key',root,True)
+ assert digest(root/'nikan.sqlite3')==before
+ assert len(m.inventory())==2 # Original archive plus verified safety snapshot.

@@ -22,11 +22,36 @@ Page custom AddressPage AddressLeave
 Function .onInit
  StrCpy $ServerURL "https://YOUR-SERVER:8766"
  ${GetParameters} $0
- ClearErrors
- ${GetOptions} $0 "/URL=" $1
- ${IfNot} ${Errors}
-  StrCpy $ServerURL $1
+ ; Read one /URL= token without treating the slashes in https:// as option delimiters.
+ StrCpy $1 0
+ FindURL:
+ StrCpy $2 $0 5 $1
+ StrCmp $2 "/URL=" ReadURLStart
+ StrCmp $2 "" ArgsDone
+ IntOp $1 $1 + 1
+ Goto FindURL
+ ReadURLStart:
+ IntOp $1 $1 + 5
+ StrCpy $ServerURL ""
+ StrCpy $3 0
+ StrCpy $2 $0 1 $1
+ StrCmp $2 '$\"' 0 ReadURL
+ StrCpy $3 1
+ IntOp $1 $1 + 1
+ ReadURL:
+ StrCpy $2 $0 1 $1
+ StrCmp $2 "" ArgsDone
+ ${If} $3 == 1
+  StrCmp $2 '$\"' ArgsDone
+ ${Else}
+  StrCmp $2 " " ArgsDone
+  StrCmp $2 '$\t' ArgsDone
  ${EndIf}
+ StrCpy $ServerURL "$ServerURL$2"
+ IntOp $1 $1 + 1
+ Goto ReadURL
+ ArgsDone:
+ ClearErrors
 FunctionEnd
 Function AddressPage
  nsDialogs::Create 1018

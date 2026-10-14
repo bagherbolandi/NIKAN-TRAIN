@@ -19,11 +19,12 @@ def restore(archive,key_file,target,replace=False):
    candidate=Path(temp)/'nikan.sqlite3';decrypt(archive,candidate,key)
    if database.exists():safety=BackupManager(target).run('before-restore')
    with FileLock(target/'backup.lock'):
+    # Prepare auxiliary keys before the single database commit. A key-file write
+    # failure must never occur after the original database has been replaced.
+    if not (target/'keys'/'recovery.key').exists():atomic_write(target/'keys'/'recovery.key',key)
+    atomic_write(target/'session.key',secrets.token_hex(32).encode())
     for suffix in ('-wal','-shm'):(target/('nikan.sqlite3'+suffix)).unlink(missing_ok=True)
     os.replace(candidate,database)
-    # Invalidate old browser sessions after rollback.
-    atomic_write(target/'session.key',secrets.token_hex(32).encode())
-    if not (target/'keys'/'recovery.key').exists():atomic_write(target/'keys'/'recovery.key',key)
   return dict(restored=True,safety_backup=safety,verification=report)
 
 def import_database(source,target,replace=False):

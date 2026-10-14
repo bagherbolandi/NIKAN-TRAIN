@@ -7,16 +7,24 @@ from network.config import initialize
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--ini',type=Path);p.add_argument('--data-dir',type=Path,required=True);p.add_argument('--wait',action='store_true');a=p.parse_args()
  if a.wait:
-  import ssl,urllib.request,time
+  import ssl,http.client,socket,time
   from network.config import load
-  config=load(a.data_dir);context=ssl.create_default_context(cafile=config['certificate']);opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context));deadline=time.monotonic()+45
+  config=load(a.data_dir);context=ssl.create_default_context(cafile=config['certificate'])
+  # Trust the configured public certificate while verifying its hostname, even
+  # when an organization certificate contains DNS names but not "localhost".
+  if hasattr(ssl,'VERIFY_X509_PARTIAL_CHAIN'):context.verify_flags|=ssl.VERIFY_X509_PARTIAL_CHAIN
+  deadline=time.monotonic()+45
   while True:
+   connection=http.client.HTTPSConnection(config['hostname'],config['port'],context=context,timeout=3)
+   connection._create_connection=lambda address,timeout,*args:socket.create_connection(('127.0.0.1',config['port']),timeout)
    try:
-    with opener.open(f"https://localhost:{config['port']}/api/status",timeout=3) as response:
-     if response.status==200:break
+    connection.request('GET','/api/status');response=connection.getresponse();response.read()
+    if response.status==200:break
+    raise OSError('Server status endpoint is not ready')
    except OSError:
     if time.monotonic()>deadline:raise RuntimeError('HTTPS server did not become ready; inspect server.log and Task Scheduler')
     time.sleep(.2)
+   finally:connection.close()
   sys.exit(0)
  if not a.ini:p.error('--ini is required when initializing')
  ini=configparser.ConfigParser(interpolation=None);ini.read(a.ini,encoding='utf-16');c=ini['server']
