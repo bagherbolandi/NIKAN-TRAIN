@@ -1,3 +1,9 @@
+## نسخه شبکه ۰٫۵
+
+نسخه مرکزی با HTTPS، ورود کاربران هم‌زمان، جداسازی دسترسی شرکت‌ها، پشتیبان خودکار رمزگذاری‌شده، نسخه دوم در پوشه شبکه و بازیابی آزمایش‌شده آماده شده است. نصاب سرور: `distribution/NikanTraining-Network-Server-Setup.exe`؛ نصاب آیکون کلاینت: `distribution/NikanTraining-Network-Client-Setup.exe`. [راهنمای نصب، اعتماد به گواهی، پوشه شبکه و بازیابی](NETWORK-README.md) را بخوانید. نسخه مستقل ۰٫۴ نیز همچنان در توزیع موجود است.
+
+برای توسعه هر دو نسخه: `python -m pip install -r requirements-dev.txt` و `python -m pytest -q`. ساخت نصاب شبکه: `python packaging/build_installer.py --network --makensis PATH_TO_MAKENSIS`؛ شروع آزمایشی سرور: ابتدا `python network_server.py --initialize --data-dir PATH` و سپس `python network_server.py --data-dir PATH`. کلیدها و پایگاه‌های محلی را به مخزن اضافه نکنید.
+
 # سامانه آموزش و شایستگی هلدینگ نیکان — نسخه ۰٫۳
 
 سامانه فارسی برای نصب مستقل روی رایانه ویندوز؛ مدیریت شش شرکت، بانک شایستگی مشترک و اطلاعات مستقل هر شرکت. نصب‌های رایانه‌های مختلف خودکار همگام نمی‌شوند.

@@ -96,7 +96,7 @@ def create_app(data_dir=None,testing=False):
  @authenticated
  def me():
   cs=db().execute('SELECT * FROM companies'+(' WHERE id=?' if g.user['role']!='admin' else ''),((g.user['company_id'],) if g.user['role']!='admin' else ())).fetchall()
-  return jsonify(username=g.user['username'],role=g.user['role'],csrf=session['csrf'],desktop=bool(app.config.get('DESKTOP_STOP')),companies=[dict(c) for c in cs])
+  return jsonify(username=g.user['username'],role=g.user['role'],csrf=session['csrf'],desktop=bool(app.config.get('DESKTOP_STOP')),network=bool(app.config.get('NETWORK')),companies=[dict(c) for c in cs])
  @app.post('/api/desktop-exit')
  @authenticated
  def desktop_exit():
@@ -211,6 +211,8 @@ def create_app(data_dir=None,testing=False):
  @authenticated
  def backup():
   if g.user['role']!='admin':raise PermissionError()
+  if app.config.get('NETWORK'):
+   manager=app.extensions['network_backup'];manager.background(manager.run);audit('encrypted_backup_requested');db().commit();return jsonify(ok=True),202
   temp=root/('backup-'+secrets.token_hex(8)+'.sqlite3')
   try:
    target=sqlite3.connect(temp)
@@ -233,6 +235,10 @@ def create_app(data_dir=None,testing=False):
   from .catalog import ensure_links
   ensure_links(db(),g.user['role']=='admin')
   audit('import',cid,json.dumps(result));db().commit();return jsonify(result)
+ def register_network(root,config):
+  from network.web import register as register_network_web
+  return register_network_web(app,db,authenticated,audit,error,root,config)
+ app.extensions['register_network']=register_network
  from .professional import register
  register(app,db,authenticated,company,audit,error,validate_refs,gaps)
  from .catalog import register as register_catalog

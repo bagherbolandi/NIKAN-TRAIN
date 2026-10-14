@@ -15,7 +15,7 @@ jobs:
           python-version: '3.13'
       - name: API and workbook tests
         run: |
-          python -m pip install -r requirements.txt pytest==8.4.2
+          python -m pip install -r requirements-network.txt pytest==8.4.2
           python -m pytest -q --junitxml=windows-pytest.xml
       - name: Publish Windows test diagnosis
         if: always()
@@ -44,9 +44,26 @@ jobs:
             git pull --rebase origin nikan-training-windows-20261013
             git push origin HEAD:nikan-training-windows-20261013
           }
+      - name: Verify network server, clients and encrypted recovery
+        shell: pwsh
+        run: ./packaging/windows_network_smoke.ps1
+      - name: Publish native network result
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path docs/windows-network-result.json) {
+            git add docs/windows-network-result.json
+            git commit -m "Record native network validation result" --allow-empty
+            git pull --rebase origin nikan-training-windows-20261013
+            git push origin HEAD:nikan-training-windows-20261013
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: NikanTraining-Windows-Installer
           path: |
             distribution/NikanTraining-Setup.exe
             distribution/NikanTraining-Setup.exe.sha256
+            distribution/NikanTraining-Network-Server-Setup.exe
+            distribution/NikanTraining-Network-Server-Setup.exe.sha256
+            distribution/NikanTraining-Network-Client-Setup.exe
+            distribution/NikanTraining-Network-Client-Setup.exe.sha256

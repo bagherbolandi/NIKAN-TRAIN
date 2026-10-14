@@ -6,13 +6,13 @@ PYTHON_URL='https://api.nuget.org/v3-flatcontainer/python/3.13.16/python.3.13.16
 PYTHON_SHA512='TGEhuRTpWtRifDR4r/GEhmg/cGMqtwB4kOCkt1QhXnCmdDE3Dict3iLJI1xrsNSRbXGyCwLEhe6qa5Rd2s376w=='
 def verify_runtime(path):
  if base64.b64encode(hashlib.sha512(path.read_bytes()).digest()).decode()!=PYTHON_SHA512:raise RuntimeError('Official CPython package checksum mismatch')
-def stage(cache,payload):
+def stage(cache,payload,network=False):
  runtime=cache/'python.3.13.16.nupkg'
  if not runtime.exists():
   with urllib.request.urlopen(PYTHON_URL,timeout=90) as response:runtime.write_bytes(response.read())
  verify_runtime(runtime)
- wheels=cache/'wheels-cp313';wheels.mkdir(exist_ok=True)
- subprocess.run([sys.executable,'-m','pip','download','-r',str(ROOT/'requirements.txt'),'--dest',str(wheels),'--platform','win_amd64','--python-version','313','--implementation','cp','--abi','cp313','--only-binary=:all:','colorama==0.4.6'],check=True)
+ wheels=cache/('wheels-network-cp313' if network else 'wheels-cp313');wheels.mkdir(exist_ok=True)
+ subprocess.run([sys.executable,'-m','pip','download','-r',str(ROOT/('requirements-network.txt' if network else 'requirements.txt')),'--dest',str(wheels),'--platform','win_amd64','--python-version','313','--implementation','cp','--abi','cp313','--only-binary=:all:','colorama==0.4.6'],check=True)
  if payload.exists():shutil.rmtree(payload)
  (payload/'runtime').mkdir(parents=True)
  with zipfile.ZipFile(runtime) as z:
@@ -34,16 +34,24 @@ def stage(cache,payload):
     target=site/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(z.read(name))
  shutil.copytree(ROOT/'app',payload/'app',ignore=shutil.ignore_patterns('__pycache__'))
  for name in ['desktop.py','stop_desktop.py','run.py','README.md','requirements.txt']:shutil.copy2(ROOT/name,payload/name)
+ if network:
+  shutil.copytree(ROOT/'network',payload/'network',ignore=shutil.ignore_patterns('__pycache__'))
+  for name in ['network_server.py','server_setup.py','recovery.py','requirements-network.txt','NETWORK-README.md']:shutil.copy2(ROOT/name,payload/name)
+  for name in ['install_server.ps1','stop_server.ps1','start_server.ps1','restore_server.ps1']:shutil.copy2(ROOT/'packaging'/name,payload/name)
  shutil.copy2(ROOT/'packaging'/'nikan.ico',payload/'nikan.ico')
  (payload/'resources').mkdir();shutil.copy2(next(ROOT.glob('*.xlsx')),payload/'resources'/'workbook.xlsx')
  manifest={'python':{'url':PYTHON_URL,'sha512_base64':PYTHON_SHA512},'wheels':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(wheels.glob('*.whl'))},'files':{str(p.relative_to(payload)):hashlib.sha256(p.read_bytes()).hexdigest() for p in payload.rglob('*') if p.is_file()}}
  (payload/'build-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
  return manifest
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--cache',type=Path,default=ROOT.parent/'nikan-build-tools');p.add_argument('--makensis',default=os.environ.get('MAKENSIS','makensis'));args=p.parse_args();args.cache.mkdir(exist_ok=True,parents=True)
- payload=args.cache/'payload';manifest=stage(args.cache,payload);output=ROOT/'distribution'/'NikanTraining-Setup.exe';output.parent.mkdir(exist_ok=True)
- subprocess.run([args.makensis,('-D' if os.name!='nt' else '/D')+'PAYLOAD='+str(payload),('-D' if os.name!='nt' else '/D')+'OUTPUT='+str(output),str(ROOT/'packaging'/'installer.nsi')],cwd=ROOT/'packaging',check=True)
+ p=argparse.ArgumentParser();p.add_argument('--cache',type=Path,default=ROOT.parent/'nikan-build-tools');p.add_argument('--network',action='store_true');p.add_argument('--makensis',default=os.environ.get('MAKENSIS','makensis'));args=p.parse_args();args.cache.mkdir(exist_ok=True,parents=True)
+ payload=args.cache/('payload-network' if args.network else 'payload');manifest=stage(args.cache,payload,args.network);output=ROOT/'distribution'/('NikanTraining-Network-Server-Setup.exe' if args.network else 'NikanTraining-Setup.exe');output.parent.mkdir(exist_ok=True)
+ subprocess.run([args.makensis,('-D' if os.name!='nt' else '/D')+'PAYLOAD='+str(payload),('-D' if os.name!='nt' else '/D')+'OUTPUT='+str(output),str(ROOT/'packaging'/('server_installer.nsi' if args.network else 'installer.nsi'))],cwd=ROOT/'packaging',check=True)
  if output.read_bytes()[:2]!=b'MZ':raise RuntimeError('Output is not a Windows executable')
- (output.parent/'NikanTraining-Setup.exe.sha256').write_text(hashlib.sha256(output.read_bytes()).hexdigest()+'  NikanTraining-Setup.exe\n')
- (output.parent/'build-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+ output.with_suffix('.exe.sha256').write_text(hashlib.sha256(output.read_bytes()).hexdigest()+'  '+output.name+'\n')
+ (output.parent/('network-build-manifest.json' if args.network else 'build-manifest.json')).write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+ if args.network:
+  client=output.parent/'NikanTraining-Network-Client-Setup.exe'
+  subprocess.run([args.makensis,('-D' if os.name!='nt' else '/D')+'OUTPUT='+str(client),str(ROOT/'packaging'/'client_installer.nsi')],cwd=ROOT/'packaging',check=True)
+  client.with_suffix('.exe.sha256').write_text(hashlib.sha256(client.read_bytes()).hexdigest()+'  '+client.name+'\n')
  print('Built installer:',output,output.stat().st_size,'bytes')
