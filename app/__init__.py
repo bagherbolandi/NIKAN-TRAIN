@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,company_id INTEGER NOT
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,user_id INTEGER,company_id INTEGER,action TEXT NOT NULL,detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY,count INTEGER NOT NULL,until REAL NOT NULL);
 '''
-FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status'],'records':['employee_id','course_id','level','score','reaction','behavior','result'],'job_profiles':['job','department','purpose','supervisor','duties','authority','education','experience','legal','hse','equipment','revision','approved_by','definition','commitments','conditions','performance','contract_notes','effective_date','review_date'],'instructors':['name','specialty','organization','qualification','rate','contact'],'needs':['skill_id','department','reason','priority','year','status','decision']}
+FIELDS={'employees':['code','name','department','job'],'skills':['code','title','category','importance'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','instructor','hours','cost','status','calendar_scope'],'records':['employee_id','course_id','level','score','reaction','behavior','result'],'job_profiles':['job','department','purpose','supervisor','duties','authority','education','experience','legal','hse','equipment','revision','approved_by','definition','commitments','conditions','performance','contract_notes','effective_date','review_date'],'instructors':['name','specialty','organization','qualification','rate','contact'],'needs':['skill_id','department','reason','priority','year','status','decision']}
 REQUIRED={'employees':['code','name'],'skills':['code','title'],'requirements':['job','skill_id','level'],'assessments':['employee_id','skill_id','level'],'courses':['skill_id','title','date','hours'],'records':['employee_id','course_id','level'],'job_profiles':['job'],'instructors':['name'],'needs':['skill_id','reason','year']}
 
 def create_app(data_dir=None,testing=False):
@@ -65,7 +65,7 @@ def create_app(data_dir=None,testing=False):
  @app.errorhandler(ValueError)
  def invalid(e):return error(str(e))
  @app.errorhandler(PermissionError)
- def denied(e):return error('دسترسی به این شرکت مجاز نیست',403)
+ def denied(e):return error('دسترسی به این عملیات یا شرکت مجاز نیست',403)
  @app.errorhandler(sqlite3.IntegrityError)
  def integrity(e):return error('اطلاعات تکراری یا نامعتبر است؛ وابستگی‌ها و محدوده مقادیر را بررسی کنید')
  @app.after_request
@@ -132,6 +132,8 @@ def create_app(data_dir=None,testing=False):
    db().execute('UPDATE users SET password=? WHERE id=?',(generate_password_hash(d['password']),uid))
   audit('update_user',target['company_id'],str(uid));db().commit();return jsonify(ok=True)
  def validate_refs(table,d,cid):
+  if table=='courses' and 'calendar_scope' in d and d['calendar_scope'] not in ('holding','internal'):
+   raise ValueError('نوع تقویم باید هلدینگ یا داخلی شرکت باشد')
   for field in ('level','importance','hours','cost','score','reaction','behavior','result','rate','priority','year'):
    if field in d and d[field] is not None:
     try:
@@ -174,15 +176,20 @@ def create_app(data_dir=None,testing=False):
  def modify(table,rid):
   if table not in FIELDS:return error('بخش یافت نشد',404)
   cid=company()
+  if table=='skills' and g.user['role']!='admin':raise PermissionError()
   if table=='skills':return error('شایستگی مشترک را از بانک هلدینگ ویرایش کنید',400)
   if g.user['role']=='viewer':raise PermissionError()
+  if table=='courses' and request.method=='PUT':db().execute('BEGIN IMMEDIATE')
   if not db().execute(f'SELECT 1 FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone():return error('رکورد یافت نشد',404)
   if request.method=='DELETE':db().execute(f'DELETE FROM {table} WHERE id=? AND company_id=?',(rid,cid))
   else:
    d={k:v for k,v in (request.get_json() or {}).items() if k in FIELDS[table]}
    if not d:raise ValueError('تغییری ارسال نشده')
    if any(k in d and d[k] in ('',None) for k in REQUIRED[table]):raise ValueError('فیلد الزامی خالی است')
-   validate_refs(table,d,cid);db().execute(f"UPDATE {table} SET {','.join(k+'=?' for k in d)} WHERE id=? AND company_id=?",list(d.values())+[rid,cid])
+   validate_refs(table,d,cid)
+   if table=='courses' and d.get('calendar_scope')=='internal' and db().execute('SELECT 1 FROM course_participants WHERE course_id=? LIMIT 1',(rid,)).fetchone():
+    raise ValueError('این دوره فهرست برنامه‌ریزی مشترک دارد؛ ادمین هلدینگ باید ابتدا فهرست افراد را خالی کند')
+   db().execute(f"UPDATE {table} SET {','.join(k+'=?' for k in d)} WHERE id=? AND company_id=?",list(d.values())+[rid,cid])
   audit(request.method+'_'+table,cid,str(rid));db().commit();return jsonify(ok=True)
  def gaps(cid):
   rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,b.title,b.importance,COALESCE(p.level,r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0)) current FROM employees e JOIN skills s ON s.company_id=e.company_id LEFT JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job AND r.skill_id=s.id LEFT JOIN personal_requirements p ON p.employee_id=e.id AND p.skill_id=s.id JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
@@ -247,4 +254,8 @@ def create_app(data_dir=None,testing=False):
  register_branding(app,db,authenticated,audit,error)
  from .documents import register as register_documents
  register_documents(app,db,authenticated,company,audit,error,gaps)
+ from .training_calendar import register as register_training_calendar
+ register_training_calendar(app,db,authenticated,company)
+ from .holding_planning import register as register_holding_planning
+ register_holding_planning(app,db,authenticated,audit,error)
  return app

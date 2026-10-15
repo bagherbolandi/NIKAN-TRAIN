@@ -1,7 +1,7 @@
 import zipfile
 import openpyxl
 LEVELS={'I':1,'L':2,'U':3,'O':4}
-def import_workbook(db,file,cid,personnel=False,allow_new=True):
+def import_workbook(db,file,cid,personnel=False,allow_new=True,skip_missing=False):
  # Reject oversized expanded ZIPs before XML processing.
  with zipfile.ZipFile(file) as z:
   if sum(x.file_size for x in z.infolist())>100*1024*1024:raise ValueError('حجم بازشده فایل بیش از حد مجاز است')
@@ -17,6 +17,9 @@ def import_workbook(db,file,cid,personnel=False,allow_new=True):
    if not row[1] or not row[2]:continue
    code=str(row[1]);bank=db.execute('SELECT 1 FROM holding_competencies WHERE code=?',(code,)).fetchone()
    if not bank:
+    # Applying the packaged template must honor the admin's current bank,
+    # including intentional deletions, without recreating deleted entries.
+    if skip_missing:continue
     if not allow_new:raise ValueError('شایستگی جدید باید توسط مدیر هلدینگ در بانک مشترک تعریف شود')
     db.execute('INSERT INTO holding_competencies(code,title,category,importance,method,reference) VALUES (?,?,?,?,?,?)',(code,str(row[2]),str(row[3] or ''),int(row[4] or 1),str(row[5] or ''),str(row[6] or '')))
    before=db.execute('SELECT count(*) FROM skills WHERE company_id=?',(cid,)).fetchone()[0]

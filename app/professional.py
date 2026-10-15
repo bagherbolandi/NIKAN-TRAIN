@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import request,jsonify,Response,session,g
 SCHEMA='''
 CREATE TABLE IF NOT EXISTS holding_competencies(code TEXT PRIMARY KEY,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT '',importance INTEGER NOT NULL DEFAULT 1,method TEXT NOT NULL DEFAULT '',reference TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS holding_catalog_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS job_profiles(id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),job TEXT NOT NULL,department TEXT NOT NULL DEFAULT '',purpose TEXT NOT NULL DEFAULT '',supervisor TEXT NOT NULL DEFAULT '',duties TEXT NOT NULL DEFAULT '',authority TEXT NOT NULL DEFAULT '',education TEXT NOT NULL DEFAULT '',experience TEXT NOT NULL DEFAULT '',legal TEXT NOT NULL DEFAULT '',hse TEXT NOT NULL DEFAULT '',equipment TEXT NOT NULL DEFAULT '',revision TEXT NOT NULL DEFAULT '',approved_by TEXT NOT NULL DEFAULT '',UNIQUE(company_id,job));
 CREATE TABLE IF NOT EXISTS employee_meta(employee_id INTEGER PRIMARY KEY REFERENCES employees(id),company_id INTEGER NOT NULL REFERENCES companies(id),source_job TEXT NOT NULL DEFAULT '',mapping TEXT NOT NULL DEFAULT '',assessment_status TEXT NOT NULL DEFAULT '',assessor TEXT NOT NULL DEFAULT '',assessment_date TEXT NOT NULL DEFAULT '',evidence TEXT NOT NULL DEFAULT '',hr_approved INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS certificates(id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),employee_id INTEGER NOT NULL REFERENCES employees(id),course_id INTEGER REFERENCES courses(id),title TEXT NOT NULL,issuer TEXT NOT NULL DEFAULT '',issued TEXT NOT NULL DEFAULT '',expires TEXT NOT NULL DEFAULT '',filename TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL,created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -14,7 +15,8 @@ CREATE TABLE IF NOT EXISTS needs(id INTEGER PRIMARY KEY,company_id INTEGER NOT N
 def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  with app.app_context():
   db().executescript(SCHEMA)
-  if not db().execute('SELECT 1 FROM holding_competencies').fetchone():
+  initialized=db().execute("SELECT 1 FROM holding_catalog_state WHERE key='initial_seed_complete'").fetchone()
+  if not initialized and not db().execute('SELECT 1 FROM holding_competencies').fetchone():
    base=Path(__file__).resolve().parents[1]
    candidates=list(base.glob('*.xlsx'))+[base/'resources'/'workbook.xlsx']
    path=next((p for p in candidates if p.exists()),None)
@@ -26,14 +28,16 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
       if r[1] and r[2]:db().execute('INSERT OR IGNORE INTO holding_competencies VALUES (?,?,?,?,?,?)',(str(r[1]),str(r[2]),str(r[3] or ''),int(r[4] or 1),str(r[5] or ''),str(r[6] or '')))
      db().commit()
     finally:w.close()
+  # Existing databases are initialized too; an intentionally emptied bank
+  # must remain empty on subsequent application starts.
+  db().execute("INSERT OR IGNORE INTO holding_catalog_state VALUES ('initial_seed_complete','1')");db().commit()
  @app.route('/api/competency-bank',methods=['GET','POST'])
  @authenticated
  def bank():
   if request.method=='GET':return jsonify([dict(r) for r in db().execute('SELECT * FROM holding_competencies ORDER BY code')])
   if g.user['role']!='admin':raise PermissionError()
-  d=request.get_json() or {}
-  if not d.get('code') or not d.get('title'):raise ValueError('کد و عنوان الزامی است')
-  if int(d.get('importance',1)) not in (1,2,3):raise ValueError('اهمیت باید ۱، ۲ یا ۳ باشد')
+  from .catalog import bank_values
+  d=bank_values(request.get_json() or {},creating=True)
   db().execute('INSERT INTO holding_competencies VALUES (?,?,?,?,?,?)',(d['code'],d['title'],d.get('category',''),int(d.get('importance',1)),d.get('method',''),d.get('reference','')));audit('holding_competency_created',detail=d['code']);db().commit();return jsonify(ok=True),201
  @app.post('/api/competency-bank/adopt')
  @authenticated
@@ -41,15 +45,15 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   cid=company()
   if g.user['role']=='viewer':raise PermissionError()
   from .catalog import ensure_links,attach
-  ensure_links(db(),g.user['role']=='admin')
+  ensure_links(db(),False)
   for bank in db().execute('SELECT code FROM holding_competencies').fetchall():attach(db(),cid,bank['code'])
   base=Path(__file__).resolve().parents[1];paths=list(base.glob('*.xlsx'))+[base/'resources'/'workbook.xlsx'];path=next((p for p in paths if p.exists()),None)
   result={}
   if path:
    from .importer import import_workbook
-   with path.open('rb') as f:result=import_workbook(db(),f,cid,False,g.user['role']=='admin')
+   with path.open('rb') as f:result=import_workbook(db(),f,cid,False,False,skip_missing=True)
   from .catalog import ensure_links
-  ensure_links(db(),g.user['role']=='admin')
+  ensure_links(db(),False)
   audit('adopt_holding_catalog',cid);db().commit();return jsonify(ok=True,imported=result)
  @app.get('/api/passports/<int:eid>')
  @authenticated

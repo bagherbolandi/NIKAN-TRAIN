@@ -42,6 +42,32 @@ def validate(install,root):
  # Actual separate HTTPS connections write to the same central database.
  with ThreadPoolExecutor(max_workers=8) as pool:assert len(list(pool.map(worker,range(16))))==16
  assert len(admin.request('/api/data/employees?company_id=1'))==16
+ # Exercise the shared 0.6 workflows through real HTTPS and separate sessions.
+ def rejected(client,path,status,data=None,method=None):
+  try:client.request(path,data,method);raise AssertionError('Unexpected access: '+path)
+  except urllib.error.HTTPError as exc:assert exc.code==status;assert json.loads(exc.read())['error']
+ admin.request('/api/competency-bank',dict(code='NET-SHARED',title='Network shared competency'))
+ courses=[]
+ for cid in (1,2):
+  sid=admin.request(f'/api/competency-bank/NET-SHARED/select?company_id={cid}',{},'POST')['id']
+  courses.append(admin.request(f'/api/data/courses?company_id={cid}',dict(skill_id=sid,title=f'Joint training {cid}',date='1405/07/23',hours=2))['id'])
+ internal=admin.request('/api/data/courses?company_id=2',dict(skill_id=sid,title='Internal company training',date='1405/07/24',hours=1,calendar_scope='internal'))['id']
+ assert {r['id'] for r in manager.request('/api/calendar')}==set(courses)
+ assert [r['id'] for r in manager.request('/api/calendar?scope=internal&company_id=2')]==[internal]
+ rejected(manager,'/api/calendar?scope=internal&company_id=1',403)
+ rejected(manager,'/api/competency-bank',403,dict(code='BYPASS',title='Forbidden'),'POST')
+ rejected(manager,'/api/competency-bank/NET-SHARED',403,dict(title='Forbidden'),'PUT')
+ rejected(manager,'/api/competency-bank/NET-SHARED',403,method='DELETE')
+ rejected(admin,'/api/competency-bank/NET-SHARED',409,method='DELETE')
+ joint_person=admin.request('/api/data/employees?company_id=2',dict(code='JOINT-1',name='Joint person company 2'))['id']
+ company_person=admin.request('/api/data/employees?company_id=1')[0]['id']
+ directory=admin.request('/api/holding/personnel');assert len(directory)==17;assert {p['company_id'] for p in directory}=={1,2}
+ roster_path=f'/api/courses/{courses[0]}/participants';selected={company_person,joint_person}
+ planned=admin.request(roster_path,dict(employee_ids=sorted(selected)),'PUT')
+ assert {p['id'] for p in planned['participants']}==selected
+ rejected(manager,'/api/holding/personnel',403);rejected(manager,roster_path,403)
+ rejected(manager,roster_path,403,dict(employee_ids=[]),'PUT')
+ assert admin.request('/api/data/records?company_id=1')==[]
  # Include actual attachment and personal amendment bytes in the production backup.
  import sqlite3
  conn=sqlite3.connect(root/'nikan.sqlite3');eid=conn.execute('SELECT id FROM employees LIMIT 1').fetchone()[0]
@@ -56,7 +82,8 @@ def validate(install,root):
   if state.get('error'):raise AssertionError(state['error'])
   if time.monotonic()>deadline:raise AssertionError('Backup did not finish')
   time.sleep(.2)
- name=state['file'];assert state['verification']['verified'];assert state['verification']['tables']['employees']==16
+ name=state['file'];assert state['verification']['verified'];assert state['verification']['tables']['employees']==17
+ assert state['verification']['tables']['course_participants']==2
  key=admin.request('/api/network/recovery-key',raw=True);assert len(key)==32
  archive=root/'backups'/name
  # A running server must refuse destructive recovery.
@@ -67,9 +94,10 @@ def validate(install,root):
   from app import create_app
   app=create_app(target,True);c=app.test_client();assert c.post('/api/login',json={'username':username,'password':password}).status_code==200
   assert len(c.get('/api/data/employees?company_id=1').json)==16
+  assert {p['id'] for p in c.get(roster_path).json['participants']}==selected
   assert c.get(f'/api/passports/{eid}?company_id=1').json['job']['commitments']=='Native independent commitment'
   assert c.get('/api/certificates/1?company_id=1').data==b'%PDF-native-network-proof'
- print('Network payload passed: verified HTTPS, 16 concurrent writes, company isolation, encrypted backup, attachment/password/personal-document recovery, active-server protection.')
+ print('Network payload passed: verified HTTPS, 16 concurrent writes, consolidated/internal calendars, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document recovery, active-server protection.')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--install',type=Path,required=True);p.add_argument('--data-dir',type=Path,required=True);a=p.parse_args();validate(a.install,a.data_dir)

@@ -1,0 +1,25 @@
+{
+  "installer": "NikanTraining-Setup.exe",
+  "size_bytes": 13089668,
+  "sha256": "69e155866a29ae55906709e3b228f35126412998bdae8190829c343562ca02c8",
+  "extracted_path": "/workspace/nikan-build-tools/extracted-standalone-06",
+  "manifest_files_verified": 1777,
+  "source_files_compared": 21,
+  "required_modules": [
+    "app/training_calendar.py",
+    "app/holding_planning.py",
+    "app/catalog.py"
+  ],
+  "manifest_matches_distribution": true,
+  "expected_standalone_wheels": 11,
+  "no_network_only_packages": true,
+  "no_local_database_or_key": true,
+  "network_artifacts_unchanged": [
+    "NikanTraining-Network-Server-Setup.exe",
+    "NikanTraining-Network-Server-Setup.exe.sha256",
+    "NikanTraining-Network-Client-Setup.exe",
+    "NikanTraining-Network-Client-Setup.exe.sha256",
+    "network-build-manifest.json"
+  ],
+  "native_windows_executed": false
+}

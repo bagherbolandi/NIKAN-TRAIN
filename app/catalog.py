@@ -1,5 +1,46 @@
 """Canonical holding competencies; legacy company IDs remain stable links."""
 SCHEMA='''CREATE TABLE IF NOT EXISTS competency_links(skill_id INTEGER PRIMARY KEY REFERENCES skills(id),code TEXT NOT NULL REFERENCES holding_competencies(code));'''
+def bank_values(data,creating=False):
+ """Validate both catalog writers without coercing malformed values into records."""
+ if not isinstance(data,dict):raise ValueError('اطلاعات شایستگی معتبر نیست')
+ fields=['title','category','importance','method','reference']
+ if creating:fields.insert(0,'code')
+ result={k:v for k,v in data.items() if k in fields}
+ required=['code','title'] if creating else []
+ for field in fields:
+  if field=='importance' or field not in result:continue
+  value=result[field]
+  if not isinstance(value,str):raise ValueError('اطلاعات متنی شایستگی معتبر نیست')
+  result[field]=value.strip()
+ if any(not result.get(k) for k in required) or ('title' in result and not result['title']):raise ValueError('کد و عنوان شایستگی الزامی است')
+ if creating and any(c in result['code'] for c in '/\\\r\n\t'):raise ValueError('کد شایستگی معتبر نیست')
+ if 'importance' in result:
+  value=result['importance']
+  try:
+   number=int(value)
+   if isinstance(value,bool) or number not in (1,2,3) or (isinstance(value,float) and value!=number):raise ValueError()
+  except (ValueError,TypeError,OverflowError):raise ValueError('اهمیت باید ۱، ۲ یا ۳ باشد')
+  result['importance']=number
+ if not result:raise ValueError('تغییری ارسال نشده است')
+ return result
+
+def bank_in_use(conn,code):
+ """Check every declared reference, including references with cascading deletes."""
+ # Company selections alone can be removed; requirements and history cannot.
+ quote=lambda name:'"'+name.replace('"','""')+'"'
+ for table in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall():
+  name=table[0]
+  if name=='competency_links':continue
+  for ref in conn.execute('PRAGMA foreign_key_list('+quote(name)+')').fetchall():
+   target,field=ref[2],ref[3]
+   if target=='skills':
+    used=conn.execute('SELECT 1 FROM '+quote(name)+' WHERE '+quote(field)+' IN (SELECT skill_id FROM competency_links WHERE code=?) LIMIT 1',(code,)).fetchone()
+   elif target=='holding_competencies':
+    used=conn.execute('SELECT 1 FROM '+quote(name)+' WHERE '+quote(field)+'=? LIMIT 1',(code,)).fetchone()
+   else:continue
+   if used:return True
+ return False
+
 def ensure_links(db,allow_new=True):
  for s in db.execute('SELECT s.* FROM skills s LEFT JOIN competency_links l ON l.skill_id=s.id WHERE l.skill_id IS NULL ORDER BY s.id').fetchall():
   code=s['code'];bank=db.execute('SELECT * FROM holding_competencies WHERE code=?',(code,)).fetchone()
@@ -48,13 +89,37 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   if g.user['role']!='admin':raise PermissionError()
   old=db().execute('SELECT * FROM holding_competencies WHERE code=?',(code,)).fetchone()
   if not old:return error('شایستگی یافت نشد',404)
-  d={k:v for k,v in (request.get_json() or {}).items() if k in ['title','category','importance','method','reference']}
-  if not d or ('title' in d and not str(d['title']).strip()):raise ValueError('عنوان الزامی است')
-  if 'importance' in d and int(d['importance']) not in (1,2,3):raise ValueError('اهمیت نامعتبر است')
+  data=request.get_json() or {}
+  if isinstance(data,dict) and 'code' in data and data['code']!=code:raise ValueError('کد شایستگی مشترک قابل تغییر نیست')
+  d=bank_values(data)
   db().execute(f"UPDATE holding_competencies SET {','.join(k+'=?' for k in d)} WHERE code=?",list(d.values())+[code])
   # Legacy columns remain readable to old reports, but have one authoritative source.
   db().execute('UPDATE skills SET title=(SELECT title FROM holding_competencies WHERE code=?),category=(SELECT category FROM holding_competencies WHERE code=?),importance=(SELECT importance FROM holding_competencies WHERE code=?) WHERE id IN (SELECT skill_id FROM competency_links WHERE code=?)',(code,code,code,code))
   audit('update_holding_competency',detail=code);db().commit();return jsonify(ok=True)
+ @app.delete('/api/competency-bank/<code>')
+ @authenticated
+ def delete_bank(code):
+  if g.user['role']!='admin':raise PermissionError()
+  conn=db()
+  # Acquire the write lock before checking references so use cannot race deletion.
+  with conn:
+   conn.execute('BEGIN IMMEDIATE')
+   if not conn.execute('SELECT 1 FROM holding_competencies WHERE code=?',(code,)).fetchone():return error('شایستگی یافت نشد',404)
+   if bank_in_use(conn,code):return error('این شایستگی در الزامات، ارزیابی‌ها، دوره‌ها یا سوابق شرکت‌ها استفاده شده و قابل حذف نیست؛ برای حفظ سوابق، عنوان و مشخصات آن را ویرایش کنید.',409)
+   ids=[r[0] for r in conn.execute('SELECT skill_id FROM competency_links WHERE code=?',(code,))]
+   conn.execute('DELETE FROM competency_links WHERE code=?',(code,))
+   conn.executemany('DELETE FROM skills WHERE id=?',[(sid,) for sid in ids])
+   conn.execute('DELETE FROM holding_competencies WHERE code=?',(code,))
+   audit('delete_holding_competency',detail=code)
+  return jsonify(ok=True)
+ @app.post('/api/competency-bank/<code>/select')
+ @authenticated
+ def select_bank(code):
+  cid=company()
+  if g.user['role']=='viewer':raise PermissionError()
+  if not db().execute('SELECT 1 FROM holding_competencies WHERE code=?',(code,)).fetchone():return error('شایستگی یافت نشد',404)
+  sid=attach(db(),cid,code)
+  audit('select_holding_competency',cid,code);db().commit();return jsonify(ok=True,id=sid)
  @app.route('/api/job-workspace',methods=['GET','PUT'])
  @authenticated
  def job_workspace():

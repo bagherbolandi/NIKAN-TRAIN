@@ -9,6 +9,9 @@ MAGIC=b'NIKANBK1';CHUNK=1024*1024
 TEHRAN=timezone(timedelta(hours=3,minutes=30))
 NAME=re.compile(r'^nikan-\d{8}T\d{6}Z-[0-9a-f]{16}\.nikbak$')
 REQUIRED={'companies','users','employees','skills','assessments','records','certificates','branding','personal_documents'}
+# These are the only new tables created by the supported 0.6 upgrade. Existing
+# archived tables retain exact row counts; additions must match their migration.
+RECOVERY_ADDITIONS={'holding_catalog_state':1,'course_participants':0}
 
 def digest(path):
  h=hashlib.sha256()
@@ -78,7 +81,12 @@ def recovery_check(backup,key,temp_root):
   from app import create_app
   app=create_app(folder,testing=True)
   assert app.test_client().get('/api/status').status_code==200
-  if inspect_db(candidate)!=header['tables']:raise ValueError('آزمون اجرای پایگاه بازیابی‌شده ناموفق بود')
+  migrated=inspect_db(candidate);archived=header['tables'];added=set(migrated)-set(archived)
+  if any(migrated.get(name)!=count for name,count in archived.items()) or added-set(RECOVERY_ADDITIONS) or any(migrated[name]!=RECOVERY_ADDITIONS[name] for name in added):
+   raise ValueError('آزمون اجرای پایگاه بازیابی‌شده ناموفق بود')
+  if 'holding_catalog_state' in added:
+   with sqlite3.connect(candidate) as conn:
+    if conn.execute('SELECT key,value FROM holding_catalog_state').fetchall()!=[('initial_seed_complete','1')]:raise ValueError('نشانه مهاجرت بانک شایستگی معتبر نیست')
   return dict(verified=True,checked_at=datetime.now(timezone.utc).isoformat(),sha256=header['sha256'],tables=header['tables'])
 
 class BackupManager:
