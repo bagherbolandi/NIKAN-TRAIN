@@ -1,5 +1,6 @@
 """Real-browser coverage for the holding calendar and company-owned course controls."""
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -94,9 +95,43 @@ def check(base):
         page.locator('#participant-company').select_option('1')
         expect(page.locator(f'[data-participant="{employee1}"]')).to_be_checked()
         page.screenshot(path='/tmp/nikan-holding-personnel-plan.png', full_page=True)
-        page.locator('#save-course-participants').click()
+        # Hold the real roster write to verify that a second submission and
+        # context changes cannot race with a shared-course save.
+        planner_route = re.compile(rf'/api/courses/{holding2}/participants$')
+        planner_requests, held_planner_writes = [], []
+
+        def hold_planner_write(route):
+            if route.request.method == 'PUT':
+                planner_requests.append(route.request.post_data_json)
+                held_planner_writes.append(route)
+            else:
+                route.continue_()
+
+        page.route(planner_route, hold_planner_write)
+        with page.expect_request(planner_route):
+            page.locator('#save-course-participants').evaluate('button => { button.click(); button.click(); }')
+        expect(page.locator('#save-course-participants')).to_be_disabled()
+        expect(page.locator('#participant-search')).to_be_disabled()
+        expect(page.locator('#participant-company')).to_be_disabled()
+        expect(page.locator('#participant-company').locator('..').locator('.select-search-input')).to_be_disabled()
+        expect(page.locator(f'[data-participant="{employee1}"]')).to_be_disabled()
+        for button in page.locator('#course-participant-dialog [data-plan-close]').all():
+            expect(button).to_be_disabled()
+        page.locator('#company').evaluate("""select => {
+            select.value = '2'; select.dispatchEvent(new Event('change', {bubbles:true}));
+        }""")
+        expect(page.locator('#company')).to_have_value('1')
+        page.locator('[data-page=employees]').evaluate('button => button.click()')
+        expect(page.locator('[data-page=courses]')).to_have_class('active')
+        expect(page.locator('#course-participant-dialog')).to_be_visible()
+        expect(page.locator('#notice')).to_contain_text('ذخیره در حال انجام است')
+        assert len(planner_requests) == len(held_planner_writes) == 1
+        assert set(planner_requests[0]['employee_ids']) == {employee1, employee2}
+        held_planner_writes.pop().continue_()
         expect(page.locator('#course-participant-dialog')).to_have_count(0)
         expect(page.locator('#notice')).to_contain_text('برنامه‌ریزی افراد دوره مشترک ذخیره شد')
+        assert len(planner_requests) == 1
+        page.unroute(planner_route, hold_planner_write)
         roster = page.request.get(base + f'/api/courses/{holding2}/participants').json()
         assert {person['id'] for person in roster['participants']} == {employee1, employee2}
         page.locator(f'[data-plan-course="{holding2}"]').click()
@@ -153,43 +188,59 @@ def check(base):
             page.locator('.metrics').wait_for()
             page.locator('[data-page=courses]').click()
             page.locator('#calendar-year').select_option('1405')
-            expect(page.locator('#calendar-scope')).to_have_value('holding')
+            expect(page.locator('#calendar-scope')).to_have_count(0)
+            expect(page.locator('[data-page=courses]')).to_contain_text('آموزش‌های داخلی شرکت')
+            assert page.locator('#nav').get_by_text('تقویم تجمیعی', exact=False).count() == 0
 
         login('calendar-manager', manager_password)
-        expect(page.locator('#calendar-grid')).to_contain_text(unsafe_title)
+        expect(page.locator('#calendar-grid')).to_contain_text('دوره داخلی تازه')
+        assert unsafe_title not in page.locator('#calendar-grid').inner_text()
         assert page.locator('[data-plan-course]').count() == 0
+        assert page.request.get(base + '/api/calendar?scope=holding').status == 403
         assert page.request.get(base + '/api/holding/personnel').status == 403
         assert page.request.get(base + f'/api/courses/{holding2}/participants').status == 403
-        assert page.locator('#table').get_by_text(unsafe_title).count() == 0
-        assert page.locator('#table [data-edit]').count() == 0
-        expect(page.locator('#add')).to_be_visible()
-        page.locator('#calendar-scope').select_option('internal')
         expect(page.locator('#table [data-edit]')).to_have_count(3)
+        page.locator('#add').click()
+        expect(page.locator('#entry [name=calendar_scope]')).to_have_value('internal')
+        expect(page.locator('#entry [name=calendar_scope] option')).to_have_count(1)
+        assert page.locator('#entry [name=calendar_scope] option[value=holding]').count() == 0
+        page.locator('#entry [name=title]').fill('دوره ساخته‌شده توسط شرکت')
+        page.locator('#entry [name=date]').fill('1405/05/01')
+        page.locator('#entry [name=hours]').fill('2')
+        page.locator('#entry button').last.click()
+        expect(page.locator('#notice')).to_contain_text('ذخیره شد')
+        expect(page.locator('#calendar-grid')).to_contain_text('دوره ساخته‌شده توسط شرکت')
+        created = next(row for row in page.request.get(base + '/api/data/courses?company_id=1').json()
+                       if row['title'] == 'دوره ساخته‌شده توسط شرکت')
+        assert created['calendar_scope'] == 'internal'
 
         login('calendar-viewer', viewer_password)
-        expect(page.locator('#calendar-grid')).to_contain_text(unsafe_title)
+        expect(page.locator('#calendar-grid')).to_contain_text('دوره داخلی تازه')
+        assert unsafe_title not in page.locator('#calendar-grid').inner_text()
         assert page.locator('[data-plan-course]').count() == 0
+        assert page.request.get(base + '/api/calendar?scope=holding').status == 403
         assert page.request.get(base + '/api/holding/personnel').status == 403
         assert page.request.get(base + f'/api/courses/{holding2}/participants').status == 403
-        assert page.locator('#add').count() == 0
-        page.locator('#calendar-scope').select_option('internal')
-        expect(page.locator('#calendar-grid')).to_contain_text('دوره داخلی تازه')
-        assert page.locator('[data-edit], [data-delete]').count() == 0
+        assert page.locator('#add,[data-edit],[data-delete]').count() == 0
         page.set_viewport_size({'width': 390, 'height': 844})
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         api_error = '<img src=x onerror=window.calendarXss=2> calendar unavailable'
         page.route('**/api/calendar?*', lambda route: route.fulfill(status=503, json={'error': api_error}))
-        page.locator('#calendar-scope').select_option('holding')
+        page.locator('[data-page=courses]').click()
         expect(page.locator('#calendar-state')).to_contain_text(api_error)
         assert page.locator('#calendar-state img').count() == 0
+        expect(page.locator('#retry-calendar')).to_be_visible()
         page.locator('#calendar-year').select_option('1406')
         expect(page.locator('#calendar-state')).to_contain_text(api_error)
         page.unroute('**/api/calendar?*')
-        page.locator('#calendar-scope').select_option('internal')
+        page.locator('#retry-calendar').click()
         expect(page.locator('#calendar-state')).not_to_contain_text(api_error)
+        expect(page.locator('#retry-calendar')).to_be_hidden()
+        page.locator('#calendar-year').select_option('1405')
+        expect(page.locator('#calendar-grid')).to_contain_text('دوره ساخته‌شده توسط شرکت')
         assert not errors, errors
         browser.close()
-    print('Calendar browser passed: holding/internal views, year/search, safe text, company-owned mutations, holding personnel planning with retained selections and cancellation, manager/viewer permissions and escaped API errors.')
+    print('Calendar browser passed: holding/internal views, year/search, safe text, company-owned mutations, holding personnel planning with retained selections, cancellation, locked writes and duplicate prevention, admin-only consolidated access, company internal creation, viewer read-only, escaped API errors and retry.')
 
 
 if __name__ == '__main__':

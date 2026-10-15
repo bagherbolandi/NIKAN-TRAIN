@@ -29,6 +29,7 @@ def validate(install,root):
  password=secrets.token_urlsafe(24);username='network-smoke-'+secrets.token_hex(4)
  assert status['setup_required'];admin.request('/api/setup',{'username':username,'password':password});admin.login(username,password)
  admin.request('/api/users',dict(username='manager1',password=password,role='manager',company_id=1));admin.request('/api/users',dict(username='manager2',password=password,role='manager',company_id=2))
+ admin.request('/api/users',dict(username='viewer2',password=password,role='viewer',company_id=2))
  manager=Client();manager.login('manager2',password)
  try:manager.request('/api/data/employees?company_id=1');raise AssertionError('Company isolation failed')
  except urllib.error.HTTPError as exc:assert exc.code==403;assert json.loads(exc.read())['error']
@@ -42,7 +43,7 @@ def validate(install,root):
  # Actual separate HTTPS connections write to the same central database.
  with ThreadPoolExecutor(max_workers=8) as pool:assert len(list(pool.map(worker,range(16))))==16
  assert len(admin.request('/api/data/employees?company_id=1'))==16
- # Exercise the shared 0.6 workflows through real HTTPS and separate sessions.
+ # Exercise the 0.7 role policy through real HTTPS and separate sessions.
  def rejected(client,path,status,data=None,method=None):
   try:client.request(path,data,method);raise AssertionError('Unexpected access: '+path)
   except urllib.error.HTTPError as exc:assert exc.code==status;assert json.loads(exc.read())['error']
@@ -52,9 +53,23 @@ def validate(install,root):
   sid=admin.request(f'/api/competency-bank/NET-SHARED/select?company_id={cid}',{},'POST')['id']
   courses.append(admin.request(f'/api/data/courses?company_id={cid}',dict(skill_id=sid,title=f'Joint training {cid}',date='1405/07/23',hours=2))['id'])
  internal=admin.request('/api/data/courses?company_id=2',dict(skill_id=sid,title='Internal company training',date='1405/07/24',hours=1,calendar_scope='internal'))['id']
- assert {r['id'] for r in manager.request('/api/calendar')}==set(courses)
- assert [r['id'] for r in manager.request('/api/calendar?scope=internal&company_id=2')]==[internal]
- rejected(manager,'/api/calendar?scope=internal&company_id=1',403)
+ assert {r['id'] for r in admin.request('/api/calendar')}==set(courses)
+ viewer=Client();viewer.login('viewer2',password)
+ for scoped in (manager,viewer):
+  rejected(scoped,'/api/calendar',403)
+  rejected(scoped,'/api/calendar?scope=holding',403)
+  assert [r['id'] for r in scoped.request('/api/calendar?scope=internal&company_id=2')]==[internal]
+  rejected(scoped,'/api/calendar?scope=internal&company_id=1',403)
+  assert courses[1] in {r['id'] for r in scoped.request('/api/data/courses?company_id=2')}
+  rejected(scoped,f'/api/data/courses/{courses[1]}?company_id=2',403,dict(title='Forbidden holding edit'),'PUT')
+  rejected(scoped,f'/api/data/courses/{courses[1]}?company_id=2',403,method='DELETE')
+ course=dict(skill_id=sid,title='Manager internal default',date='1405/07/25',hours=1)
+ rejected(manager,'/api/data/courses?company_id=2',403,dict(course,calendar_scope='holding'),'POST')
+ own_internal=manager.request('/api/data/courses?company_id=2',course)['id']
+ assert any(r['id']==own_internal and r['calendar_scope']=='internal' for r in manager.request('/api/calendar?scope=internal&company_id=2'))
+ rejected(manager,f'/api/data/courses/{own_internal}?company_id=2',403,dict(calendar_scope='holding'),'PUT')
+ rejected(viewer,'/api/data/courses?company_id=2',403,course,'POST')
+ assert {r['id'] for r in admin.request('/api/calendar')}==set(courses)
  rejected(manager,'/api/competency-bank',403,dict(code='BYPASS',title='Forbidden'),'POST')
  rejected(manager,'/api/competency-bank/NET-SHARED',403,dict(title='Forbidden'),'PUT')
  rejected(manager,'/api/competency-bank/NET-SHARED',403,method='DELETE')
@@ -97,7 +112,7 @@ def validate(install,root):
   assert {p['id'] for p in c.get(roster_path).json['participants']}==selected
   assert c.get(f'/api/passports/{eid}?company_id=1').json['job']['commitments']=='Native independent commitment'
   assert c.get('/api/certificates/1?company_id=1').data==b'%PDF-native-network-proof'
- print('Network payload passed: verified HTTPS, 16 concurrent writes, consolidated/internal calendars, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document recovery, active-server protection.')
+ print('Network 0.7 payload passed: verified HTTPS, 16 concurrent writes, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document recovery, active-server protection.')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--install',type=Path,required=True);p.add_argument('--data-dir',type=Path,required=True);a=p.parse_args();validate(a.install,a.data_dir)

@@ -1,4 +1,4 @@
-import io,sqlite3
+import io,json,sqlite3
 from pathlib import Path
 import pytest
 from app import create_app
@@ -33,6 +33,28 @@ def test_atomic_job_and_person_editors_and_summary(ready):
  assert c.put(f'/api/assessment-workspace/{eid}?company_id=2',headers=h,json={'items':[]}).status_code==404
  assert c.put(p,headers=h,json={'items':[{'code':'S001','level':0}]}).status_code==200
  assert c.get('/api/needs-summary?company_id=1').json==[]
+
+@pytest.mark.parametrize('payload',[None,[],['items'],{}, {'items':None}, {'items':{}}, {'items':[None]}, {'items':[{'code':'S001','level':True}]}, {'items':[{'code':'S001','level':1},{'code':'S001','level':2}]}, {'items':[{'code':'S001','level':1},{'code':[],'level':2}]}])
+def test_workspace_invalid_requests_leave_levels_links_and_audit_unchanged(ready,payload):
+ app,c,h=ready
+ eid=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SAFE','name':'Preserve draft','job':'Engineer'}).json['id']
+ paths=['/api/job-workspace?company_id=1&job=Engineer',f'/api/assessment-workspace/{eid}?company_id=1']
+ for path in paths:
+  assert c.put(path,headers=h,json={'items':[{'code':'S001','level':3}]}).status_code==200
+  with sqlite3.connect(app.config['DB']) as conn:
+   tables=['requirements','assessments','skills','competency_links','audit']
+   before={name:conn.execute('SELECT * FROM '+name).fetchall() for name in tables}
+  response=c.put(path,headers=h,data='null' if payload is None else json.dumps(payload),content_type='application/json')
+  assert response.status_code==400,response.get_data(as_text=True)
+  with sqlite3.connect(app.config['DB']) as conn:
+   assert {name:conn.execute('SELECT * FROM '+name).fetchall() for name in tables}==before
+
+def test_workspace_malformed_json_is_controlled_and_session_stays_usable(ready):
+ app,c,h=ready
+ response=c.put('/api/job-workspace?company_id=1&job=Engineer',headers=h,data='{invalid',content_type='application/json')
+ assert response.status_code==400
+ assert c.get('/api/me').status_code==200
+ assert c.get('/api/data/requirements?company_id=1').json==[]
 
 def test_search_scope_and_escaped_query(ready):
  app,c,h=ready

@@ -151,6 +151,28 @@ def test_scope_change_requires_clearing_joint_participants(planning):
     assert client.get(url).status_code == 400
 
 
+def test_extreme_route_ids_and_malformed_json_are_controlled_and_atomic(planning):
+    app, client, headers, employees, courses = planning
+    url = participant_url(courses['holding'])
+    assert client.put(url, headers=headers, json={'employee_ids': [employees[2]]}).status_code == 200
+    original = client.get(url).json
+    for course_id in (2 ** 63, 2 ** 64, '9' * 1000):
+        path = participant_url(course_id)
+        for response in (client.get(path), client.put(path, headers=headers, json={'employee_ids': []})):
+            assert response.status_code == 400
+            assert set(response.json) == {'error'}
+    for data in ('{', '{"employee_ids":' + '[' * 1500 + '0' + ']' * 1500 + '}',
+                 '{"employee_ids":[],"ignored":"\\ud800"}'):
+        response = client.put(url, headers=headers, data=data, content_type='application/json')
+        assert response.status_code == 400
+        assert set(response.json) == {'error'}
+    assert client.get(url).json == original
+    manager, manager_headers = login(app, 'manager')
+    # Authorization still precedes route/body validation and cannot expose data.
+    assert manager.get(participant_url(2 ** 64)).status_code == 403
+    assert manager.put(url, headers=manager_headers, data='{', content_type='application/json').status_code == 403
+
+
 def test_roster_survives_restart_and_database_backup_and_course_delete_cascades(planning, tmp_path):
     app, client, headers, employees, courses = planning
     url = participant_url(courses['holding'])

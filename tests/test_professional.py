@@ -1,4 +1,4 @@
-import io,sqlite3
+import io,json,sqlite3
 from pathlib import Path
 import pytest
 from app import create_app
@@ -43,3 +43,29 @@ def test_import_preserves_assessment_provenance(ready):
  employee=c.get('/api/data/employees?company_id=1').json[0]
  passport=c.get(f'/api/passports/{employee["id"]}?company_id=1').json
  assert passport['meta'];assert passport['meta']['assessment_status'];assert not passport['meta']['hr_approved']
+
+@pytest.mark.parametrize('payload',[None,[],['Engineer'],{}, {'job':None}, {'job':['Engineer']}, {'job':{}}, {'job':'Missing job'}])
+def test_invalid_job_approval_preserves_employee_metadata_and_audit(ready,payload):
+ app,c,h=ready
+ eid=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SAFE','name':'Keep person','job':'Original job'}).json['id']
+ with sqlite3.connect(app.config['DB']) as conn:
+  tables=['employees','employee_meta','audit'];before={name:conn.execute('SELECT * FROM '+name).fetchall() for name in tables}
+ response=c.put(f'/api/passports/{eid}/approval?company_id=1',headers=h,data='null' if payload is None else json.dumps(payload),content_type='application/json')
+ assert response.status_code==400,response.get_data(as_text=True)
+ with sqlite3.connect(app.config['DB']) as conn:
+  assert {name:conn.execute('SELECT * FROM '+name).fetchall() for name in tables}==before
+
+@pytest.mark.parametrize('field,value',[('employee_id','bad'),('employee_id','1.5'),('employee_id','0'),('employee_id','9'*100),('course_id','bad'),('course_id','1.5'),('course_id','0'),('course_id','9'*100)])
+def test_invalid_certificate_ids_never_silently_create_unlinked_documents(ready,field,value):
+ app,c,h=ready
+ eid=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'CERT','name':'Certificate owner'}).json['id']
+ data={'employee_id':str(eid),'course_id':'','title':'Keep association','file':(io.BytesIO(b'%PDF-1.4\n%%EOF'),'cert.pdf'),field:value}
+ response=c.post('/api/certificates?company_id=1',headers=h,data=data)
+ assert response.status_code==400,response.get_data(as_text=True)
+ assert c.get('/api/certificates?company_id=1').json==[]
+
+@pytest.mark.parametrize('path',['/api/passports/{}/approval','/api/passports/{}','/api/certificates/{}','/api/assessment-workspace/{}'])
+def test_oversize_route_identifiers_are_controlled(ready,path):
+ app,c,h=ready;url=path.format('9'*100)+'?company_id=1'
+ response=c.put(url,headers=h,json={'job':'Engineer'}) if path.endswith('/approval') else c.get(url)
+ assert response.status_code==400

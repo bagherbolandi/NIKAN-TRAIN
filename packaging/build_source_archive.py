@@ -11,7 +11,7 @@ if __name__=='__main__':
  out=ROOT/'distribution'/'NikanTraining-Windows.zip'
  with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
   for p in files:z.write(p,Path('NikanTraining')/p.relative_to(ROOT))
-  for p in [installer,checksum]+list((ROOT/'distribution').glob('*Network*Setup.exe*')):
+  for p in [installer,checksum]+sorted((ROOT/'distribution').glob('*Network*Setup.exe*'))+[ROOT/'distribution'/'build-manifest.json',ROOT/'distribution'/'network-build-manifest.json']:
    if p.suffix=='.exe':assert hashlib.sha256(p.read_bytes()).hexdigest()==p.with_suffix('.exe.sha256').read_text().split()[0]
    z.write(p,'NikanTraining/'+p.name)
  with zipfile.ZipFile(out) as z:

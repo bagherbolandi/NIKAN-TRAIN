@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as root:
  assert c.post('/api/competency-bank/adopt?company_id=1',headers=h).status_code==200
  assert c.get('/api/data/job_profiles?company_id=1').json
  assert c.get('/api/dashboard?company_id=2').json['employees']==0
- # Validate the shared 0.6 features using the standalone payload and its database.
+ # Validate the 0.7 role policy using the standalone payload and its database.
  assert c.post('/api/competency-bank',headers=h,json={'code':'PAYLOAD-SHARED','title':'Shared training competency'}).status_code==201
  skills={}
  for cid in (1,2):
@@ -56,8 +56,26 @@ with tempfile.TemporaryDirectory() as root:
   assert c.post('/api/users',headers=h,json={'username':name,'password':'Temporary-role-password-123','role':role,'company_id':2}).status_code==201
   scoped=app.test_client();assert scoped.post('/api/login',json={'username':name,'password':'Temporary-role-password-123'}).status_code==200
   sh={'X-CSRF-Token':scoped.get('/api/me').json['csrf']}
-  assert {r['id'] for r in scoped.get('/api/calendar').json}==set(courses)
+  assert scoped.get('/api/calendar').status_code==403
+  assert scoped.get('/api/calendar?scope=holding').status_code==403
+  own_internal=scoped.get('/api/calendar?scope=internal&company_id=2')
+  assert own_internal.status_code==200
+  assert internal in {r['id'] for r in own_internal.json}
+  assert all(r['company_id']==2 and r['calendar_scope']=='internal' for r in own_internal.json)
   assert scoped.get('/api/calendar?scope=internal&company_id=1').status_code==403
+  # Company attendance can still refer to historical holding courses, while
+  # scheduling and changing those courses remains an administrator operation.
+  assert courses[1] in {r['id'] for r in scoped.get('/api/data/courses?company_id=2').json}
+  assert scoped.put(f'/api/data/courses/{courses[1]}?company_id=2',headers=sh,json={'title':'Forbidden holding edit'}).status_code==403
+  assert scoped.delete(f'/api/data/courses/{courses[1]}?company_id=2',headers=sh).status_code==403
+  course={'skill_id':skills[2],'title':'Company default training','date':'1405/07/25','hours':1}
+  assert scoped.post('/api/data/courses?company_id=2',headers=sh,json={**course,'calendar_scope':'holding'}).status_code==403
+  response=scoped.post('/api/data/courses?company_id=2',headers=sh,json=course)
+  assert response.status_code==(201 if role=='manager' else 403),response.json
+  if role=='manager':
+   own_id=response.json['id']
+   assert any(r['id']==own_id and r['calendar_scope']=='internal' for r in scoped.get('/api/calendar?scope=internal&company_id=2').json)
+   assert scoped.put(f'/api/data/courses/{own_id}?company_id=2',headers=sh,json={'calendar_scope':'holding'}).status_code==403
   assert scoped.get('/api/holding/personnel').status_code==403
   assert scoped.get(roster).status_code==403
   assert scoped.put(roster,headers=sh,json={'employee_ids':[]}).status_code==403
@@ -65,6 +83,7 @@ with tempfile.TemporaryDirectory() as root:
   assert scoped.put('/api/competency-bank/PAYLOAD-SHARED',headers=sh,json={'title':'Forbidden'}).status_code==403
   assert scoped.delete('/api/competency-bank/PAYLOAD-SHARED',headers=sh).status_code==403
   assert scoped.post('/api/competency-bank/PAYLOAD-SHARED/select?company_id=2',headers=sh).status_code==(200 if role=='manager' else 403)
+ assert {r['id'] for r in c.get('/api/calendar').json}==set(courses)
  snapshot=c.post('/api/backup',headers=h)
  assert snapshot.data.startswith(b'SQLite format 3'),snapshot.status_code
  restored_dir=Path(root)/'restored';restored_dir.mkdir()
@@ -72,7 +91,7 @@ with tempfile.TemporaryDirectory() as root:
  restored=create_app(restored_dir,True).test_client()
  assert restored.post('/api/login',json={'username':'validation-admin','password':'Test-only-password-123'}).status_code==200
  assert {r['id'] for r in restored.get(roster).json['participants']}==set(employees)
- print('Standalone 0.6 features passed: holding/internal calendars, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.')
+ print('Standalone 0.7 features passed: admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.')
  server=create_server(app,host='127.0.0.1',port=0);thread=threading.Thread(target=server.run,daemon=True);thread.start()
  try:
   with urllib.request.urlopen(f'http://127.0.0.1:{server.effective_port}/api/status') as response:assert response.status==200

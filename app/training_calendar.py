@@ -1,6 +1,6 @@
 """Holding training calendar and explicitly separate internal company events."""
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 
 def migrate(db):
@@ -29,8 +29,11 @@ def register(app, db, authenticated, company):
         if scope not in ('holding', 'internal'):
             raise ValueError('نوع تقویم باید هلدینگ یا داخلی شرکت باشد')
 
-        # Only holding events are shared. Internal events always use the same
-        # company authorization as personnel, attendance and course management.
+        if scope == 'holding' and g.user['role'] != 'admin':
+            raise PermissionError()
+
+        # Consolidated planning belongs to the holding administrator. Company
+        # users can view their authorized internal calendar independently.
         where = 'c.calendar_scope=?'
         parameters = [scope]
         if scope == 'internal':

@@ -1,4 +1,5 @@
 """Canonical holding competencies; legacy company IDs remain stable links."""
+from .validation import json_object, number, positive_id
 SCHEMA='''CREATE TABLE IF NOT EXISTS competency_links(skill_id INTEGER PRIMARY KEY REFERENCES skills(id),code TEXT NOT NULL REFERENCES holding_competencies(code));'''
 def bank_values(data,creating=False):
  """Validate both catalog writers without coercing malformed values into records."""
@@ -15,12 +16,8 @@ def bank_values(data,creating=False):
  if any(not result.get(k) for k in required) or ('title' in result and not result['title']):raise ValueError('کد و عنوان شایستگی الزامی است')
  if creating and any(c in result['code'] for c in '/\\\r\n\t'):raise ValueError('کد شایستگی معتبر نیست')
  if 'importance' in result:
-  value=result['importance']
-  try:
-   number=int(value)
-   if isinstance(value,bool) or number not in (1,2,3) or (isinstance(value,float) and value!=number):raise ValueError()
-  except (ValueError,TypeError,OverflowError):raise ValueError('اهمیت باید ۱، ۲ یا ۳ باشد')
-  result['importance']=number
+  try:result['importance']=number(result['importance'],integer=True,minimum=1,maximum=3)
+  except ValueError:raise ValueError('اهمیت باید ۱، ۲ یا ۳ باشد') from None
  if not result:raise ValueError('تغییری ارسال نشده است')
  return result
 
@@ -89,8 +86,8 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   if g.user['role']!='admin':raise PermissionError()
   old=db().execute('SELECT * FROM holding_competencies WHERE code=?',(code,)).fetchone()
   if not old:return error('شایستگی یافت نشد',404)
-  data=request.get_json() or {}
-  if isinstance(data,dict) and 'code' in data and data['code']!=code:raise ValueError('کد شایستگی مشترک قابل تغییر نیست')
+  data=json_object()
+  if 'code' in data and data['code']!=code:raise ValueError('کد شایستگی مشترک قابل تغییر نیست')
   d=bank_values(data)
   db().execute(f"UPDATE holding_competencies SET {','.join(k+'=?' for k in d)} WHERE code=?",list(d.values())+[code])
   # Legacy columns remain readable to old reports, but have one authoritative source.
@@ -127,7 +124,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   if not job:raise ValueError('شغل را انتخاب کنید')
   if request.method=='PUT':
    if g.user['role']=='viewer':raise PermissionError()
-   items=(request.get_json() or {}).get('items',[])
+   items=json_object().get('items')
    if not isinstance(items,list) or len(items)>2000:raise ValueError('تعداد اقلام نامعتبر است')
    validated=[];seen=set()
    for item in items:
@@ -156,11 +153,11 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.route('/api/assessment-workspace/<int:eid>',methods=['GET','PUT'])
  @authenticated
  def assessment_workspace(eid):
-  cid=company();e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
+  cid=company();eid=positive_id(eid);e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   if request.method=='PUT':
    if g.user['role']=='viewer':raise PermissionError()
-   items=(request.get_json() or {}).get('items',[])
+   items=json_object().get('items')
    if not isinstance(items,list) or len(items)>2000:raise ValueError('تعداد اقلام نامعتبر است')
    checked=[];seen=set()
    for item in items:

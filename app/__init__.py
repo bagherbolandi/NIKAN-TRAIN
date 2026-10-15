@@ -1,8 +1,9 @@
-import os, sqlite3, secrets, time, json, io, csv, re, math
+import os, sqlite3, secrets, time, json, io, csv
 from pathlib import Path
 from functools import wraps
 from flask import Flask, request, jsonify, session, send_from_directory, g, Response
 from werkzeug.security import generate_password_hash, check_password_hash
+from .validation import json_object, positive_id, number, jalali_date
 
 COMPANIES=['نور ایستا پلاستیک','نور ایستا خراسان','برنا کامپوزیت ایرانیان','پایا پلاست ایرانیان','پلیمری تدبیر نیکان','ایمن ایستا الکتریک']
 SCHEMA='''
@@ -58,8 +59,8 @@ def create_app(data_dir=None,testing=False):
    return f(*args,**kwargs)
   return inner
  def company():
-  cid=request.args.get('company_id',type=int)
-  if not cid or not db().execute('SELECT 1 FROM companies WHERE id=?',(cid,)).fetchone():raise ValueError('شرکت را انتخاب کنید')
+  cid=positive_id(request.args.get('company_id'))
+  if not db().execute('SELECT 1 FROM companies WHERE id=?',(cid,)).fetchone():raise ValueError('شرکت را انتخاب کنید')
   if g.user['role']!='admin' and g.user['company_id']!=cid:raise PermissionError()
   return cid
  @app.errorhandler(ValueError)
@@ -79,15 +80,19 @@ def create_app(data_dir=None,testing=False):
  def setup():
   if db().execute('SELECT 1 FROM users').fetchone():return error('راه‌اندازی قبلاً انجام شده است',403)
   if request.remote_addr not in ('127.0.0.1','::1'):return error('راه‌اندازی فقط روی رایانه میزبان مجاز است',403)
-  d=request.get_json() or {};u=str(d.get('username','')).strip();p=d.get('password','')
+  d=json_object();u=d.get('username','');p=d.get('password','')
+  if not isinstance(u,str) or not isinstance(p,str):raise ValueError('نام کاربری و رمز عبور باید متنی باشند')
+  u=u.strip()
   if len(u)<3 or len(p)<12:return error('نام کاربری حداقل ۳ و رمز عبور حداقل ۱۲ نویسه باشد')
   db().execute("INSERT INTO users(username,password,role) VALUES (?,?,'admin')",(u,generate_password_hash(p)));db().commit();return jsonify(ok=True)
  @app.post('/api/login')
  def login():
-  d=request.get_json() or {};name=str(d.get('username',''))[:100];a=db().execute('SELECT * FROM login_attempts WHERE username=?',(name,)).fetchone()
+  d=json_object();name=d.get('username','');password=d.get('password','')
+  if not isinstance(name,str) or not isinstance(password,str):raise ValueError('نام کاربری و رمز عبور باید متنی باشند')
+  name=name[:100];a=db().execute('SELECT * FROM login_attempts WHERE username=?',(name,)).fetchone()
   if a and a['until']>time.time() and a['count']>=5:return error('تلاش‌های زیاد؛ ۱۵ دقیقه بعد دوباره امتحان کنید',429)
   u=db().execute('SELECT * FROM users WHERE username=? AND active=1',(name,)).fetchone()
-  if not u or not check_password_hash(u['password'],d.get('password','')):
+  if not u or not check_password_hash(u['password'],password):
    count=(a['count'] if a and a['until']>time.time() else 0)+1
    db().execute('INSERT OR REPLACE INTO login_attempts VALUES (?,?,?)',(name,count,time.time()+900));db().commit();return error('نام کاربری یا رمز عبور نادرست است',401)
   session.clear();session['uid']=u['id'];session['csrf']=secrets.token_hex(32);session.permanent=True
@@ -112,42 +117,56 @@ def create_app(data_dir=None,testing=False):
  def users():
   if g.user['role']!='admin':raise PermissionError()
   if request.method=='GET':return jsonify([dict(r) for r in db().execute('SELECT id,username,role,company_id,active FROM users')])
-  d=request.get_json() or {}
-  if d.get('role') not in ('manager','viewer') or len(d.get('password',''))<12 or len(d.get('username',''))<3:return error('نقش یا رمز عبور نامعتبر است')
-  cid=int(d.get('company_id',0))
+  d=json_object()
+  if not isinstance(d.get('password'),str) or not isinstance(d.get('username'),str):raise ValueError('نام کاربری و رمز عبور باید متنی باشند')
+  d['username']=d['username'].strip()
+  if d.get('role') not in ('manager','viewer') or len(d['password'])<12 or len(d['username'])<3:return error('نقش یا رمز عبور نامعتبر است')
+  cid=positive_id(d.get('company_id'))
+  if not db().execute('SELECT 1 FROM companies WHERE id=?',(cid,)).fetchone():raise ValueError('شرکت یافت نشد')
   db().execute('INSERT INTO users(username,password,role,company_id) VALUES (?,?,?,?)',(d['username'],generate_password_hash(d['password']),d['role'],cid));audit('create_user',cid,d['username']);db().commit();return jsonify(ok=True),201
  @app.put('/api/users/<int:uid>')
  @authenticated
  def update_user(uid):
   if g.user['role']!='admin':raise PermissionError()
+  uid=positive_id(uid)
   target=db().execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
   if not target:return error('کاربر یافت نشد',404)
-  d=request.get_json() or {}
+  d=json_object()
+  if not any(k in d for k in ('active','password')):raise ValueError('تغییری ارسال نشده')
   if 'active' in d:
    if uid==g.user['id']:raise ValueError('حساب خود را نمی‌توانید غیرفعال کنید')
-   if d['active'] not in (0,1):raise ValueError('وضعیت نامعتبر است')
-   db().execute('UPDATE users SET active=? WHERE id=?',(d['active'],uid))
+   if type(d['active']) is not int or d['active'] not in (0,1):raise ValueError('وضعیت نامعتبر است')
   if 'password' in d:
-   if len(d['password'])<12:raise ValueError('رمز عبور حداقل ۱۲ نویسه باشد')
+   if not isinstance(d['password'],str) or len(d['password'])<12:raise ValueError('رمز عبور حداقل ۱۲ نویسه باشد')
+  if 'active' in d:db().execute('UPDATE users SET active=? WHERE id=?',(d['active'],uid))
+  if 'password' in d:
    db().execute('UPDATE users SET password=? WHERE id=?',(generate_password_hash(d['password']),uid))
   audit('update_user',target['company_id'],str(uid));db().commit();return jsonify(ok=True)
  def validate_refs(table,d,cid):
   if table=='courses' and 'calendar_scope' in d and d['calendar_scope'] not in ('holding','internal'):
    raise ValueError('نوع تقویم باید هلدینگ یا داخلی شرکت باشد')
-  for field in ('level','importance','hours','cost','score','reaction','behavior','result','rate','priority','year'):
-   if field in d and d[field] is not None:
-    try:
-     value=float(d[field])
-     if not math.isfinite(value):raise ValueError()
-    except (ValueError,TypeError):raise ValueError('مقدار عددی نامعتبر است')
-    if field in ('level','importance','priority','year') and value != int(value):raise ValueError('سطح و اهمیت باید عدد صحیح باشند')
+  numeric={'level':dict(integer=True,minimum=1 if table=='requirements' else 0,maximum=4),
+           'importance':dict(integer=True,minimum=1,maximum=3),'hours':dict(positive=True),
+           'cost':dict(minimum=0),'score':dict(minimum=0,maximum=100,nullable=True),
+           'reaction':dict(minimum=1,maximum=5,nullable=True),'behavior':dict(minimum=1,maximum=5,nullable=True),
+           'result':dict(minimum=0,maximum=100,nullable=True),'rate':dict(minimum=0),
+           'priority':dict(integer=True,minimum=1,maximum=3),'year':dict(integer=True,positive=True)}
+  for field,limits in numeric.items():
+   if field in d:d[field]=number(d[field],**limits)
+  references={'employee_id':'employees','skill_id':'skills','course_id':'courses'}
+  for field in FIELDS.get(table,[]):
+   if field in d and field not in numeric and field not in references:
+    if not isinstance(d[field],str):raise ValueError('مقدار فیلد متنی معتبر نیست')
+    if field in REQUIRED.get(table,[]) and not d[field].strip():raise ValueError('فیلد الزامی خالی است')
+  if 'status' in d:
+   choices=('planned','approved','completed','cancelled') if table=='courses' else ('submitted','approved','rejected')
+   if d['status'] not in choices:raise ValueError('وضعیت نامعتبر است')
   if 'date' in d:
-   d['date']=str(d['date']).translate(str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩','01234567890123456789'))
-   if not re.fullmatch(r'1[34]\d{2}/(0[1-9]|1[0-2])/(0[1-9]|[12]\d|3[01])',d['date']):raise ValueError('تاریخ شمسی با قالب 1405/03/25 وارد شود')
-   y,m,day=map(int,d['date'].split('/'))
-   if day>(31 if m<=6 else 30):raise ValueError('روز برای ماه انتخاب‌شده نامعتبر است')
-  for field,target in [('employee_id','employees'),('skill_id','skills'),('course_id','courses')]:
-   if field in d and not db().execute(f'SELECT 1 FROM {target} WHERE id=? AND company_id=?',(d[field],cid)).fetchone():raise ValueError('رکورد مرتبط متعلق به این شرکت نیست')
+   d['date']=jalali_date(d['date'])
+  for field,target in references.items():
+   if field in d:
+    d[field]=positive_id(d[field])
+    if not db().execute(f'SELECT 1 FROM {target} WHERE id=? AND company_id=?',(d[field],cid)).fetchone():raise ValueError('رکورد مرتبط متعلق به این شرکت نیست')
  @app.route('/api/data/<table>',methods=['GET','POST'])
  @authenticated
  def data(table):
@@ -159,7 +178,10 @@ def create_app(data_dir=None,testing=False):
   if table=='skills' and g.user['role']!='admin':raise PermissionError()
   if request.method=='GET':return jsonify([dict(r) for r in db().execute(f'SELECT * FROM {table} WHERE company_id=? ORDER BY id DESC',(cid,))])
   if g.user['role']=='viewer':raise PermissionError()
-  d=request.get_json() or {};d={k:v for k,v in d.items() if k in FIELDS[table]}
+  d={k:v for k,v in json_object().items() if k in FIELDS[table]}
+  if table=='courses' and g.user['role']!='admin':
+   if d.get('calendar_scope')=='holding':raise PermissionError()
+   d.setdefault('calendar_scope','internal')
   if any(d.get(k) in (None,'') for k in REQUIRED[table]):return error('فیلدهای الزامی را تکمیل کنید')
   validate_refs(table,d,cid)
   if table=='skills':
@@ -179,12 +201,16 @@ def create_app(data_dir=None,testing=False):
   if table=='skills' and g.user['role']!='admin':raise PermissionError()
   if table=='skills':return error('شایستگی مشترک را از بانک هلدینگ ویرایش کنید',400)
   if g.user['role']=='viewer':raise PermissionError()
-  if table=='courses' and request.method=='PUT':db().execute('BEGIN IMMEDIATE')
-  if not db().execute(f'SELECT 1 FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone():return error('رکورد یافت نشد',404)
+  rid=positive_id(rid)
+  if table=='courses':db().execute('BEGIN IMMEDIATE')
+  target=db().execute(f'SELECT * FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone()
+  if not target:return error('رکورد یافت نشد',404)
+  if table=='courses' and g.user['role']!='admin' and target['calendar_scope']=='holding':raise PermissionError()
   if request.method=='DELETE':db().execute(f'DELETE FROM {table} WHERE id=? AND company_id=?',(rid,cid))
   else:
-   d={k:v for k,v in (request.get_json() or {}).items() if k in FIELDS[table]}
+   d={k:v for k,v in json_object().items() if k in FIELDS[table]}
    if not d:raise ValueError('تغییری ارسال نشده')
+   if table=='courses' and g.user['role']!='admin' and d.get('calendar_scope')=='holding':raise PermissionError()
    if any(k in d and d[k] in ('',None) for k in REQUIRED[table]):raise ValueError('فیلد الزامی خالی است')
    validate_refs(table,d,cid)
    if table=='courses' and d.get('calendar_scope')=='internal' and db().execute('SELECT 1 FROM course_participants WHERE course_id=? LIMIT 1',(rid,)).fetchone():

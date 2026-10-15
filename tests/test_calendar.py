@@ -64,10 +64,9 @@ def calendars(tmp_path):
     return app, client, headers, courses
 
 
-@pytest.mark.parametrize('username', ['admin', 'manager', 'viewer'])
-def test_holding_calendar_consolidates_public_schedule_for_all_roles(calendars, username):
+def test_holding_calendar_consolidates_schedule_for_admin(calendars):
     app, _, _, courses = calendars
-    client, _ = login(app, username)
+    client, _ = login(app, 'admin')
     response = client.get('/api/calendar')
     assert response.status_code == 200
     assert [row['id'] for row in response.json] == [courses[1, 'holding'], courses[2, 'holding']]
@@ -80,6 +79,16 @@ def test_holding_calendar_consolidates_public_schedule_for_all_roles(calendars, 
     assert b'Private employee' not in response.data
     # A previously selected company must not silently narrow the main calendar.
     assert client.get('/api/calendar?scope=holding&company_id=1').json == response.json
+
+
+@pytest.mark.parametrize('username', ['manager', 'viewer'])
+def test_holding_calendar_is_unavailable_to_company_users(calendars, username):
+    app, _, _, _ = calendars
+    client, _ = login(app, username)
+    for path in ('/api/calendar', '/api/calendar?scope=holding', '/api/calendar?scope=holding&company_id=1'):
+        response = client.get(path)
+        assert response.status_code == 403
+        assert b'holding 2' not in response.data
 
 
 @pytest.mark.parametrize('username', ['manager', 'viewer'])
@@ -147,7 +156,9 @@ def test_network_https_calendar_uses_company_authorization(tmp_path):
     assert user.status_code == 201
     manager, manager_headers = login(app, 'network-manager', url)
     assert manager.get('/api/calendar').status_code == 403
-    response = manager.get('/api/calendar', base_url=url)
+    assert manager.get('/api/calendar', base_url=url).status_code == 403
+    assert manager.get('/api/calendar?scope=holding', base_url=url).status_code == 403
+    response = admin.get('/api/calendar', base_url=url)
     assert response.status_code == 200
     assert {row['company_id'] for row in response.json} == {1, 2}
     assert all(row['calendar_scope'] == 'holding' for row in response.json)
@@ -159,10 +170,10 @@ def test_network_https_calendar_uses_company_authorization(tmp_path):
     }).status_code == 403
 
 
-def test_shared_schedule_does_not_grant_cross_company_crud_or_records(calendars):
+def test_company_courses_and_records_remain_company_scoped(calendars):
     app, _, _, courses = calendars
     client, headers = login(app, 'manager')
-    assert client.get('/api/calendar').status_code == 200
+    assert client.get('/api/calendar').status_code == 403
     for table in ('courses', 'employees', 'records'):
         assert client.get(f'/api/data/{table}?company_id=2').status_code == 403
     for method, payload in (('put', {'title': 'Changed'}), ('delete', None)):
@@ -176,6 +187,49 @@ def test_shared_schedule_does_not_grant_cross_company_crud_or_records(calendars)
         headers=headers, json={'title': 'Changed'},
     ).status_code == 404
     assert client.get('/api/data/records?company_id=1').json == []
+
+
+def test_company_manager_creates_and_manages_only_internal_courses(calendars):
+    app, admin, admin_headers, courses = calendars
+    skill_id = admin.get('/api/data/skills?company_id=1').json[0]['id']
+    manager, headers = login(app, 'manager')
+    course = {'skill_id': skill_id, 'title': 'Company internal training', 'date': '1405/02/01', 'hours': 1}
+    response = manager.post('/api/data/courses?company_id=1', headers=headers, json=course)
+    assert response.status_code == 201
+    new_id = response.json['id']
+    own_courses = manager.get('/api/data/courses?company_id=1').json
+    assert next(row for row in own_courses if row['id'] == new_id)['calendar_scope'] == 'internal'
+    # Historical holding references remain readable for company attendance.
+    assert any(row['id'] == courses[1, 'holding'] for row in own_courses)
+    assert new_id in {row['id'] for row in manager.get('/api/calendar?scope=internal&company_id=1').json}
+    assert manager.post(
+        '/api/data/courses?company_id=1', headers=headers, json={**course, 'calendar_scope': 'holding'},
+    ).status_code == 403
+    assert manager.put(
+        f'/api/data/courses/{new_id}?company_id=1', headers=headers,
+        json={'calendar_scope': 'holding', 'title': 'Disallowed promotion'},
+    ).status_code == 403
+    assert manager.put(
+        f'/api/data/courses/{new_id}?company_id=1', headers=headers, json={'title': 'Updated internal training'},
+    ).status_code == 200
+    holding_id = courses[1, 'holding']
+    for patch in ({'title': 'Disallowed edit'}, {'status': 'completed'}, {'calendar_scope': 'internal'}):
+        assert manager.put(
+            f'/api/data/courses/{holding_id}?company_id=1', headers=headers, json=patch,
+        ).status_code == 403
+    assert manager.delete(f'/api/data/courses/{holding_id}?company_id=1', headers=headers).status_code == 403
+    # Only the admin can promote a company course, after which the company
+    # manager loses write access without changing the course's owner or ID.
+    assert admin.put(
+        f'/api/data/courses/{new_id}?company_id=1', headers=admin_headers, json={'calendar_scope': 'holding'},
+    ).status_code == 200
+    assert manager.delete(f'/api/data/courses/{new_id}?company_id=1', headers=headers).status_code == 403
+    assert admin.put(
+        f'/api/data/courses/{new_id}?company_id=1', headers=admin_headers, json={'calendar_scope': 'internal'},
+    ).status_code == 200
+    assert manager.delete(f'/api/data/courses/{new_id}?company_id=1', headers=headers).status_code == 200
+    own_courses = admin.get('/api/data/courses?company_id=1').json
+    assert next(row for row in own_courses if row['id'] == holding_id)['title'] == 'holding 1'
 
 
 def test_course_scope_defaults_validation_and_viewer_read_only(calendars):

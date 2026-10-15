@@ -3,6 +3,7 @@
 import json
 
 from flask import g, jsonify, request
+from .validation import json_object, positive_id
 
 
 SCHEMA = '''
@@ -66,6 +67,7 @@ def register(app, db, authenticated, audit, error):
     @authenticated
     def course_participants(course_id):
         require_admin()
+        course_id = positive_id(course_id)
         connection = db()
         if request.method == 'GET':
             course = course_for_planning(connection, course_id)
@@ -73,8 +75,8 @@ def register(app, db, authenticated, audit, error):
                 return error('دوره یافت نشد', 404)
             return jsonify(roster(connection, course))
 
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get('employee_ids'), list):
+        body = json_object()
+        if not isinstance(body.get('employee_ids'), list):
             raise ValueError('فهرست شناسه کارکنان را ارسال کنید')
         employee_ids = body['employee_ids']
         if len(employee_ids) > 5000:

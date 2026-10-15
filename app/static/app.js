@@ -1,33 +1,117 @@
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let user,cid,page='dashboard',setup=false,cache={},editId=null,userReset=null;
 let courseCalendarScope='holding',courseCalendarYear=currentJalaliYear();
 function currentJalaliYear(){return Number(new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn',{year:'numeric',timeZone:'Asia/Tehran'}).format(new Date()).match(/\d+/)[0])}
+function currentJalaliDate(){const parts=new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Tehran'}).formatToParts(new Date());return ['year','month','day'].map(type=>parts.find(part=>part.type===type).value).join('/')}
 const labels={code:'کد',name:'نام و نام خانوادگی',department:'واحد سازمانی',job:'سمت شغلی',title:'عنوان',category:'گروه مهارت',importance:'اهمیت (۱ تا ۳)',skill_id:'مهارت',level:'سطح شایستگی (۰ تا ۴)',employee_id:'پرسنل',course_id:'دوره آموزشی',date:'تاریخ شمسی (۱۴۰۵/۰۳/۲۵)',instructor:'مدرس',hours:'مدت (ساعت)',cost:'هزینه (میلیون ریال)',status:'وضعیت',score:'نمره آزمون (۰ تا ۱۰۰)',reaction:'رضایت (۱ تا ۵)',behavior:'نظر مدیر (۱ تا ۵)',result:'تحقق هدف (درصد)',username:'نام کاربری',password:'رمز عبور (حداقل ۱۲ نویسه)',role:'نقش',company_id:'شرکت',required:'سطح لازم',current:'سطح فعلی',gap:'فاصله',created:'زمان ثبت',action:'عملیات',detail:'شناسه رکورد',active:'فعال',calendar_scope:'نمایش در تقویم'};
 const defs={employees:['code','name','department','job'],skills:['code','title','category','importance'],requirements:['job','skill_id','level'],assessments:['employee_id','skill_id','level'],courses:['skill_id','title','date','instructor','hours','cost','status','calendar_scope'],records:['employee_id','course_id','level','score','reaction','behavior','result'],users:['username','password','role','company_id']};
 const menus=[['dashboard','◈','نمای کلی آموزش'],['employees','♙','پرسنل و ساختار سازمانی'],['skills','▦','کاتالوگ مهارت‌ها'],['requirements','▤','شناسنامه شغلی'],['assessments','▥','ماتریس شایستگی'],['gaps','◎','نیازسنجی و گپ‌آنالیز'],['courses','▣','برنامه و تقویم آموزش'],['records','✓','سوابق و اثربخشی'],['import','↥','ورود اطلاعات اکسل'],['audit','≡','گزارش رویدادها'],['users','♧','مدیریت کاربران'],['backup','◷','پشتیبان‌گیری']];
-async function api(path,options={}){options.headers={...(options.headers||{}),'X-CSRF-Token':user?.csrf||''};if(options.body&&!(options.body instanceof FormData)){options.headers['Content-Type']='application/json';options.body=JSON.stringify(options.body)}const r=await fetch('/api/'+path,options);if(!r.ok){let j=await r.json().catch(()=>({error:'خطای ارتباط با سامانه'}));throw Error(j.error)}return r.headers.get('content-type')?.includes('json')?r.json():r.blob()}
+let navigationVersion=0,readController=new AbortController(),entryContext=null;
+const staleRequest=()=>new DOMException('', 'AbortError');
+function nextNavigation(){navigationVersion++;readController.abort();readController=new AbortController();return navigationVersion}
+function resetSession(message=''){
+ nextNavigation();user=null;cid=null;page='dashboard';setup=false;cache={};editId=null;userReset=null;courseCalendarScope='holding';courseCalendarYear=currentJalaliYear();
+ if(typeof workspaceDialog!=='undefined')workspaceDialog=null;if(typeof workspaceDialogOwner!=='undefined')workspaceDialogOwner=null;if(typeof workspaceDialogDirty!=='undefined')workspaceDialogDirty=false;if(typeof pendingWorkspace!=='undefined')pendingWorkspace=0;
+ if(typeof referenceOptions!=='undefined')referenceOptions={};if(typeof referenceOptionsCid!=='undefined')referenceOptionsCid=null;if(typeof backupPoll!=='undefined')clearTimeout(backupPoll);if(typeof brandingAssets!=='undefined')brandingAssets=[];entryContext=null;
+ $('#desktop-exit')?.remove();$('#company-logo')?.remove();document.querySelectorAll('.brand-mark').forEach(mark=>mark.textContent='N');document.querySelector('link[rel=icon]')?.remove();
+ document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());$('#entry').reset();$('#auth').reset();$('#content').replaceChildren();$('#nav').replaceChildren();$('#company').replaceChildren();
+ $('#notice').textContent='';$('#company-label').textContent='';$('#page-title').textContent='';$('#shell').hidden=true;$('#login').hidden=false;$('#login-error').textContent=message;$('#auth-title').textContent='ورود به سامانه';$('#auth button').textContent='ورود به فضای کاری';$('#auth [name=password]').minLength=1;$('#user-label').textContent='';
+}
+async function api(path,options={}){
+ const version=navigationVersion,account=user,isRead=!options.method||options.method==='GET';
+ options.headers={...(options.headers||{}),'X-CSRF-Token':user?.csrf||''};
+ if(isRead&&!options.signal)options.signal=readController.signal;
+ if(options.body&&!(options.body instanceof FormData)){options.headers['Content-Type']='application/json';options.body=JSON.stringify(options.body)}
+ let response;
+ try{response=await fetch('/api/'+path,options)}catch(err){if(err.name==='AbortError')throw err;throw Error('ارتباط با سامانه برقرار نشد. اتصال را بررسی و دوباره تلاش کنید.')}
+ if(account!==user||(isRead&&version!==navigationVersion))throw staleRequest();
+ if(!response.ok){
+  const result=await response.json().catch(()=>({})),err=Error(result.error||'دریافت پاسخ سامانه انجام نشد. دوباره تلاش کنید.');err.status=response.status;
+  if(account!==user||(isRead&&version!==navigationVersion))throw staleRequest();
+  if(response.status===401&&user===account&&user)resetSession('نشست شما پایان یافته است. دوباره وارد شوید.');
+  throw err;
+ }
+ let result;
+ try{result=response.headers.get('content-type')?.includes('json')?await response.json():await response.blob()}catch(err){if(err.name==='AbortError')throw err;throw Error('پاسخ سامانه قابل خواندن نیست. دوباره تلاش کنید.')}
+ if(account!==user||(isRead&&version!==navigationVersion))throw staleRequest();return result;
+}
 const scoped=p=>p+(p.includes('?')?'&':'?')+'company_id='+cid;
 function notice(t){$('#notice').textContent=t}
-async function load(){try{user=await api('me');page='dashboard';courseCalendarScope='holding';courseCalendarYear=currentJalaliYear();$('#login').hidden=true;$('#shell').hidden=false;cid=user.companies[0]?.id;$('#company').innerHTML=user.companies.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');if(user.desktop&&!$('#desktop-exit')){const close=document.createElement('button');close.id='desktop-exit';close.className='quiet';close.textContent='بستن برنامه';close.onclick=async()=>{await api('desktop-exit',{method:'POST'});document.body.textContent='برنامه نیکان بسته شد. می‌توانید پنجره را ببندید.'};$('.header-tools').append(close)}$('#user-label').textContent=user.username+' · '+({admin:'مدیر هلدینگ',manager:'مسئول آموزش',viewer:'مشاهده‌گر'}[user.role]);$('#nav').innerHTML=menus.filter(m=>user.role==='admin'||!['users','backup','branding'].includes(m[0])).map(m=>`<button data-page="${m[0]}"><span>${m[1]}</span>${m[2]}</button>`).join('');$('#nav').onclick=e=>{const b=e.target.closest('button');if(b){page=b.dataset.page;render().catch(e=>notice(e.message))}};await render()}catch(e){$('#login').hidden=false;$('#shell').hidden=true;setup=(await api('status')).setup_required;$('#auth-title').textContent=setup?'ساخت حساب مدیر هلدینگ':'ورود به سامانه';$('#auth button').textContent=setup?'راه‌اندازی امن سامانه':'ورود به فضای کاری';$('#auth [name=password]').minLength=setup?12:1}}
-$('#auth').onsubmit=async e=>{e.preventDefault();try{const d=Object.fromEntries(new FormData(e.target));if(setup)await api('setup',{method:'POST',body:d});await api('login',{method:'POST',body:d});$('#login-error').textContent='';await load()}catch(e){$('#login-error').textContent=e.message}};
-$('#logout').onclick=async()=>{await api('logout',{method:'POST'});user=null;await load()};$('#company').onchange=async e=>{cid=Number(e.target.value);await render()};$('#close-dialog').onclick=()=>$('#dialog').close();
-async function preload(){const items=await Promise.all(['employees','skills','courses'].map(t=>api(scoped('data/'+t))));['employees','skills','courses'].forEach((t,i)=>cache[t]=items[i])}
+function navigationFailure(err,version=navigationVersion){
+ if(err.name==='AbortError'||version!==navigationVersion||!user)return;
+ notice(err.message);$('#content').innerHTML='<div class="empty"><h2>بارگذاری این بخش انجام نشد</h2><p>حساب شما همچنان متصل است؛ می‌توانید دوباره تلاش کنید یا بخش دیگری را باز کنید.</p><button id="retry-page">تلاش مجدد</button></div>';
+ $('#retry-page').onclick=()=>renderCurrent();
+}
+async function renderCurrent(){
+ if(!user)return false;const version=nextNavigation();
+ try{await render();return version===navigationVersion&&!!user}catch(err){navigationFailure(err,version);return false}
+}
+async function navigateTo(nextPage,nextCompany=cid){
+ if(!user||$('#entry').dataset.busy||(typeof workspaceSaving!=='undefined'&&workspaceSaving))return;const changedCompany=Number(nextCompany)!==Number(cid);page=nextPage;cid=Number(nextCompany);if(changedCompany){cache={};editId=null;userReset=null}
+ return renderCurrent();
+}
+function drawNavigation(){
+ const allowed=menus.filter(item=>user.role==='admin'||!['users','backup','branding'].includes(item[0]));
+ const groups=[['پرسنل و شایستگی',['employees','passports','bank','skills','requirements','job_profiles','assessments','gaps']],['برنامه و اجرا',['courses','needs','instructors','records','certificates','report']],['مدیریت سامانه',['import','audit','users','backup','branding']]];
+ const button=item=>`<button data-page="${item[0]}"><span aria-hidden="true">${item[1]}</span>${esc(item[2])}</button>`;
+ $('#nav').innerHTML=allowed.filter(item=>item[0]==='dashboard').map(button).join('')+groups.map(([name,keys])=>{const items=allowed.filter(item=>keys.includes(item[0]));return items.length?`<section class="nav-group"><h2 class="nav-group-title">${name}</h2>${items.map(button).join('')}</section>`:''}).join('');
+ $('#nav').onclick=e=>{const button=e.target.closest('[data-page]');if(button)navigateTo(button.dataset.page)};
+}
+async function showLogin(){
+ $('#login').hidden=false;$('#shell').hidden=true;
+ try{setup=(await api('status')).setup_required;$('#auth-title').textContent=setup?'ساخت حساب مدیر هلدینگ':'ورود به سامانه';$('#auth button').textContent=setup?'راه‌اندازی امن سامانه':'ورود به فضای کاری';$('#auth [name=password]').minLength=setup?12:1}
+ catch(err){if(err.name!=='AbortError')$('#login-error').textContent=err.message}
+}
+async function load(){
+ let account;
+ try{account=await api('me')}catch(err){
+  if(err.name==='AbortError')return;
+  if(err.status===401){if(user)resetSession();await showLogin();return}
+  if(user){navigationFailure(err);return}
+  $('#login-error').textContent=err.message;let retry=$('#retry-login-state');if(!retry){retry=document.createElement('button');retry.id='retry-login-state';retry.type='button';retry.className='quiet';retry.textContent='تلاش مجدد برای اتصال';$('#login-error').after(retry)}retry.onclick=()=>load();return;
+ }
+ user=account;page='dashboard';courseCalendarScope=user.role==='admin'?'holding':'internal';courseCalendarYear=currentJalaliYear();cache={};editId=null;userReset=null;
+ $('#retry-login-state')?.remove();$('#login').hidden=true;$('#shell').hidden=false;$('#login-error').textContent='';$('#auth [name=password]').value='';cid=user.companies[0]?.id;
+ $('#company').innerHTML=user.companies.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join('');
+ menus.find(item=>item[0]==='courses')[2]=user.role==='admin'?'تقویم تجمیعی و برنامه‌ریزی هلدینگ':'آموزش‌های داخلی شرکت';
+ if(user.desktop&&!$('#desktop-exit')){const close=document.createElement('button');close.id='desktop-exit';close.className='quiet';close.textContent='بستن برنامه';close.onclick=async()=>{try{await api('desktop-exit',{method:'POST'});document.body.textContent='برنامه نیکان بسته شد. می‌توانید پنجره را ببندید.'}catch(err){notice(err.message)}};$('.header-tools').append(close)}
+ $('#user-label').textContent=user.username+' · '+({admin:'مدیر هلدینگ',manager:'مسئول آموزش',viewer:'مشاهده‌گر'}[user.role]);drawNavigation();await renderCurrent();
+}
+const formBusyStates=new WeakMap();
+function setFormBusy(form,busy){
+ if(busy){form.dataset.busy='1';const controls=[...form.querySelectorAll('button')];formBusyStates.set(form,controls.map(button=>[button,button.disabled]));controls.forEach(button=>button.disabled=true);form.setAttribute('aria-busy','true')}
+ else{delete form.dataset.busy;form.removeAttribute('aria-busy');for(const [button,disabled] of formBusyStates.get(form)||[])if(button.isConnected)button.disabled=disabled;formBusyStates.delete(form)}
+}
+$('#auth').onsubmit=async e=>{
+ e.preventDefault();const form=e.target;if(form.dataset.busy)return;setFormBusy(form,true);
+ try{const data=Object.fromEntries(new FormData(form));if(setup){await api('setup',{method:'POST',body:data});setup=false}await api('login',{method:'POST',body:data});$('#login-error').textContent='';await load()}
+ catch(err){if(err.name!=='AbortError')$('#login-error').textContent=err.message}finally{setFormBusy(form,false)}
+};
+$('#logout').onclick=async()=>{const button=$('#logout');if(button.disabled)return;button.disabled=true;try{await api('logout',{method:'POST'});resetSession();await showLogin()}catch(err){if(err.status!==401&&err.name!=='AbortError')notice(err.message)}finally{button.disabled=false}};
+$('#company').onchange=e=>navigateTo(page,Number(e.target.value));$('#close-dialog').onclick=()=>{if(!$('#entry').dataset.busy)$('#dialog').close()};$('#dialog').addEventListener('cancel',e=>{if($('#entry').dataset.busy)e.preventDefault()});
+async function preload(){
+ const ownerCid=Number(cid),version=navigationVersion,items=await Promise.all(['employees','skills','courses'].map(table=>api('data/'+table+'?company_id='+ownerCid)));
+ if(!user||Number(cid)!==ownerCid||version!==navigationVersion)throw staleRequest();
+ ['employees','skills','courses'].forEach((table,index)=>cache[table]=items[index]);
+}
 function display(k,v){if(k==='calendar_scope')return v==='internal'?'داخلی شرکت':'تجمیعی هلدینگ';if(k==='skill_id')return cache.skills?.find(r=>r.id===v)?.title||v;if(k==='employee_id')return cache.employees?.find(r=>r.id===v)?.name||v;if(k==='course_id')return cache.courses?.find(r=>r.id===v)?.title||v;if(k==='company_id')return user.companies.find(r=>r.id===v)?.name||v;if(k==='status')return {planned:'برنامه‌ریزی‌شده',approved:'مصوب',completed:'برگزارشده',cancelled:'لغوشده'}[v]||v;if(k==='role')return {manager:'مسئول آموزش',viewer:'مشاهده‌گر',admin:'مدیر هلدینگ'}[v];return v??'—'}
 async function render(){notice('');$('#company-label').textContent=user.companies.find(c=>c.id===Number(cid))?.name;$('#page-title').textContent=menus.find(m=>m[0]===page)?.[2];document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));await preload();const el=$('#content');
- if(page==='dashboard'){const d=await api(scoped('dashboard'));el.innerHTML=`<div class="metrics">${[['پرسنل ثبت‌شده',d.employees,'سرمایه انسانی شرکت'],['مهارت‌های سازمانی',d.skills,'کاتالوگ شایستگی‌ها'],['گپ آموزشی باز',d.gaps,'مبنای نیازسنجی و برنامه‌ریزی'],['دوره‌های آموزشی',d.courses,'برنامه‌ریزی و اجرا']].map((x,i)=>`<div class="card"><small>${x[0]}</small><strong class="${i===2?'accent':''}">${Number(x[1]).toLocaleString('fa-IR')}</strong><p>${x[2]}</p></div>`).join('')}</div><div class="hero"><div><h2>از شایستگی امروز تا توانمندی فردا</h2><p>چرخه آموزش را از تعریف شغل و سنجش مهارت تا اجرای دوره و ارزیابی اثربخشی دنبال کنید.</p><button id="go-gaps">مشاهده نیازهای آموزشی ←</button></div><div class="orb">N</div></div><div class="grid"><div class="panel"><h2>نمای شرکت‌های تحت دسترسی</h2>${d.companies.map(c=>`<div class="company-row"><span>${esc(c.name)}</span><b>${Number(c.employees).toLocaleString('fa-IR')} نفر</b></div>`).join('')}</div><div class="panel"><h2>وضعیت چرخه آموزش</h2><div class="company-row"><span>سوابق فردی دوره‌ها</span><b>${d.records}</b></div><div class="company-row"><span>بودجه دوره‌های فعال</span><b>${Number(d.budget).toLocaleString('fa-IR')} م.ریال</b></div><p class="help">برای آغاز، کاتالوگ و شناسنامه‌ها را از اکسل وارد کنید، شرکت پرسنل را مشخص کنید و سپس دوره‌های رفع گپ را برنامه‌ریزی کنید.</p><div class="pill">تفکیک دسترسی شش شرکت فعال است</div></div></div>`;$('#go-gaps').onclick=()=>{page='gaps';render().catch(e=>notice(e.message))};return}
- if(page==='import'){el.innerHTML=`<div class="panel import-box"><h2>انتقال اطلاعات از فایل مبنا</h2><p class="help">مهارت‌ها و سطوح لازم مشاغل به شرکت انتخاب‌شده وارد می‌شوند. ورود تکراری رکوردهای موجود را تغییر نمی‌دهد. پرسنل و ارزیابی‌ها تنها با تأیید شما منتقل می‌شوند؛ سوابق و برنامه‌های اکسل در این نسخه منتقل نمی‌شوند.</p><form id="import-form"><label>فایل اکسل<input name="file" type="file" accept=".xlsx" required></label><label class="check"><input type="checkbox" name="personnel" value="yes"> تأیید می‌کنم پرسنل این فایل متعلق به شرکت انتخاب‌شده است.</label><button ${user.role==='viewer'?'disabled':''}>ورود و اعتبارسنجی اطلاعات</button></form></div>`;$('#import-form').onsubmit=async e=>{e.preventDefault();const btn=e.target.querySelector('button');btn.disabled=true;notice('در حال بررسی و ورود اطلاعات…');try{const r=await api(scoped('import'),{method:'POST',body:new FormData(e.target)});notice(`ورود انجام شد: ${r.skills} مهارت، ${r.requirements} الزام شغلی، ${r.employees} پرسنل و ${r.assessments} ارزیابی جدید.`)}catch(e){notice(e.message)}finally{btn.disabled=false}};return}
+ if(page==='dashboard'){const d=await api(scoped('dashboard'));el.innerHTML=`<div class="metrics">${[['پرسنل ثبت‌شده',d.employees,'سرمایه انسانی شرکت'],['مهارت‌های سازمانی',d.skills,'کاتالوگ شایستگی‌ها'],['گپ آموزشی باز',d.gaps,'مبنای نیازسنجی و برنامه‌ریزی'],['دوره‌های آموزشی',d.courses,'برنامه‌ریزی و اجرا']].map((x,i)=>`<div class="card"><small>${x[0]}</small><strong class="${i===2?'accent':''}">${Number(x[1]).toLocaleString('fa-IR')}</strong><p>${x[2]}</p></div>`).join('')}</div><div class="hero"><div><h2>از شایستگی امروز تا توانمندی فردا</h2><p>چرخه آموزش را از تعریف شغل و سنجش مهارت تا اجرای دوره و ارزیابی اثربخشی دنبال کنید.</p><button id="go-gaps">مشاهده نیازهای آموزشی ←</button></div><div class="orb">N</div></div><div class="grid"><div class="panel"><h2>نمای شرکت‌های تحت دسترسی</h2>${d.companies.map(c=>`<div class="company-row"><span>${esc(c.name)}</span><b>${Number(c.employees).toLocaleString('fa-IR')} نفر</b></div>`).join('')}</div><div class="panel"><h2>وضعیت چرخه آموزش</h2><div class="company-row"><span>سوابق فردی دوره‌ها</span><b>${d.records}</b></div><div class="company-row"><span>بودجه دوره‌های فعال</span><b>${Number(d.budget).toLocaleString('fa-IR')} م.ریال</b></div><p class="help">برای آغاز، کاتالوگ و شناسنامه‌ها را از اکسل وارد کنید، شرکت پرسنل را مشخص کنید و سپس دوره‌های رفع گپ را برنامه‌ریزی کنید.</p><div class="pill">تفکیک دسترسی شش شرکت فعال است</div></div></div>`;$('#go-gaps').onclick=()=>navigateTo('gaps');return}
+ if(page==='import'){el.innerHTML=`<div class="panel import-box"><h2>انتقال اطلاعات از فایل مبنا</h2><p class="help">مهارت‌ها و سطوح لازم مشاغل به شرکت انتخاب‌شده وارد می‌شوند. ورود تکراری رکوردهای موجود را تغییر نمی‌دهد. پرسنل و ارزیابی‌ها تنها با تأیید شما منتقل می‌شوند؛ سوابق و برنامه‌های اکسل در این نسخه منتقل نمی‌شوند.</p><form id="import-form"><label>فایل اکسل<input name="file" type="file" accept=".xlsx" required></label><label class="check"><input type="checkbox" name="personnel" value="yes"> تأیید می‌کنم پرسنل این فایل متعلق به شرکت انتخاب‌شده است.</label><button ${user.role==='viewer'?'disabled':''}>ورود و اعتبارسنجی اطلاعات</button></form></div>`;$('#import-form').onsubmit=async e=>{e.preventDefault();const form=e.target;if(form.dataset.busy||user.role==='viewer')return;const ownerCid=cid,account=user,data=new FormData(form);setFormBusy(form,true);const unlock=workspaceWriteLock(form);notice('در حال بررسی و ورود اطلاعات…');try{const r=await api('import?company_id='+ownerCid,{method:'POST',body:data});if(user===account&&cid===ownerCid)notice(`ورود انجام شد: ${r.skills} مهارت، ${r.requirements} الزام شغلی، ${r.employees} پرسنل و ${r.assessments} ارزیابی جدید.`)}catch(err){if(user===account&&cid===ownerCid&&err.name!=='AbortError')notice(err.message)}finally{unlock();setFormBusy(form,false)}};return}
  if(page==='backup'){el.innerHTML='<div class="panel import-box"><h2>نسخه پشتیبان پایگاه داده</h2><p class="help">فایل پشتیبان شامل اطلاعات تمام شرکت‌ها و کاربران است. آن را در محل امن و با دسترسی محدود نگهداری کنید. برای بازیابی، سامانه را ببندید و مطابق راهنمای نصب اقدام کنید.</p><button id="download">دریافت نسخه پشتیبان</button></div>';$('#download').onclick=async()=>{try{download(await api('backup',{method:'POST'}),'nikan-backup.sqlite3')}catch(e){notice(e.message)}};return}
  if(page==='courses')return renderCourseCalendar(el);
  let rows=await api(page==='users'?'users':scoped(page==='gaps'?'gaps':page==='audit'?'audit':'data/'+page));const fields=page==='gaps'?['code','name','department','job','title','required','current','gap','importance']:page==='audit'?['created','username','action','detail']:page==='users'?['username','role','company_id','active']:defs[page];el.innerHTML=`<div class="toolbar"><input id="search" placeholder="جستجو در اطلاعات…" aria-label="جستجو"><div>${page==='gaps'?'<button id="csv">خروجی نیازسنجی CSV</button>':''}${defs[page]&&user.role!=='viewer'?'<button id="add">＋ ثبت اطلاعات جدید</button>':''}</div></div><div id="table"></div>`;
  let tableOffset=0,tableQuery='';function draw(q=tableQuery){tableQuery=q;const filtered=rows.filter(r=>fields.some(k=>searchMatch(display(k,r[k]),q)));$('#table').innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr>${fields.map(k=>`<th>${labels[k]||k}</th>`).join('')}${defs[page]&&page!=='users'&&user.role!=='viewer'?'<th>عملیات</th>':''}</tr></thead><tbody>${filtered.slice(tableOffset,tableOffset+25).map(r=>`<tr>${fields.map(k=>`<td>${esc(display(k,r[k]))}</td>`).join('')}${defs[page]&&page!=='users'&&user.role!=='viewer'?`<td><button class="quiet" data-edit="${r.id}">ویرایش</button><button class="quiet" data-delete="${r.id}">حذف</button></td>`:''}</tr>`).join('')}</tbody></table></div>${pager(tableOffset,25,filtered.length)}`:'<div class="empty"><h2>اطلاعاتی برای نمایش وجود ندارد</h2><p>اطلاعات این شرکت را ثبت کنید یا از فایل اکسل وارد کنید.</p></div>';bindPager($('#table'),()=>{tableOffset-=25;draw()},()=>{tableOffset+=25;draw()})}
- draw();if(page==='users'){const box=document.createElement('div');box.className='panel';box.innerHTML='<h2>کنترل حساب‌ها</h2>'+rows.map(r=>`<div class="company-row"><span>${esc(r.username)}</span><div><button class="quiet" data-toggle="${r.id}" data-value="${r.active?0:1}">${r.active?'غیرفعال‌سازی':'فعال‌سازی'}</button> <button class="quiet" data-password="${r.id}">تغییر رمز</button></div></div>`).join('');$('#table').after(box);box.onclick=async e=>{const t=e.target.closest('[data-toggle]'),p=e.target.closest('[data-password]');try{if(t){await api('users/'+t.dataset.toggle,{method:'PUT',body:{active:Number(t.dataset.value)}});await render()}if(p){userReset=p.dataset.password;$('#form-title').textContent='تغییر رمز عبور';$('#form-error').textContent='';$('#fields').innerHTML='<label>رمز عبور جدید<input name="password" type="password" minlength="12" required autocomplete="new-password"></label>';$('#dialog').showModal()}}catch(err){notice(err.message)}}}$('#search').oninput=e=>{tableOffset=0;draw(e.target.value)};if($('#add'))$('#add').onclick=()=>openForm();if($('#csv'))$('#csv').onclick=async()=>download(await api(scoped('export')),'training-needs.csv');$('#table').onclick=async e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit)openForm(rows.find(r=>r.id===Number(edit.dataset.edit)));if(del&&confirm('این رکورد حذف شود؟')){try{await api(scoped('data/'+page+'/'+del.dataset.delete),{method:'DELETE'});await render()}catch(e){notice(e.message)}}};
+ draw();if(page==='users'){const box=document.createElement('div');box.className='panel';box.innerHTML='<h2>کنترل حساب‌ها</h2>'+rows.map(r=>`<div class="company-row"><span>${esc(r.username)}</span><div><button class="quiet" data-toggle="${r.id}" data-value="${r.active?0:1}">${r.active?'غیرفعال‌سازی':'فعال‌سازی'}</button> <button class="quiet" data-password="${r.id}">تغییر رمز</button></div></div>`).join('');$('#table').after(box);box.onclick=async e=>{if(workspaceSaving)return;const t=e.target.closest('[data-toggle]'),p=e.target.closest('[data-password]');try{if(t){const unlock=workspaceWriteLock(el);try{await api('users/'+t.dataset.toggle,{method:'PUT',body:{active:Number(t.dataset.value)}});await workspaceRefresh(()=>render(),'وضعیت حساب به‌روزرسانی شد.')}finally{unlock()}}if(p){entryContext={page,cid:Number(cid),account:user};userReset=p.dataset.password;$('#form-title').textContent='تغییر رمز عبور';$('#form-error').textContent='';$('#fields').innerHTML='<label>رمز عبور جدید<input name="password" type="password" minlength="12" required autocomplete="new-password"></label>';$('#dialog').showModal()}}catch(err){notice(err.message)}}}$('#search').oninput=e=>{tableOffset=0;draw(e.target.value)};if($('#add'))$('#add').onclick=()=>openForm();if($('#csv'))$('#csv').onclick=async()=>download(await api(scoped('export')),'training-needs.csv');$('#table').onclick=async e=>{if(workspaceSaving)return;const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit)openForm(rows.find(r=>r.id===Number(edit.dataset.edit)));if(del&&confirm('این رکورد حذف شود؟')){const unlock=workspaceWriteLock(el);try{await api(scoped('data/'+page+'/'+del.dataset.delete),{method:'DELETE'});await workspaceRefresh(()=>render(),'رکورد حذف شد.')}catch(err){notice(err.message)}finally{unlock()}}};
 }
 async function renderCourseCalendar(el){
+ const isHoldingAdmin=user.role==='admin';if(!isHoldingAdmin)courseCalendarScope='internal';
  const ownerCid=Number(cid),companyName=user.companies.find(c=>c.id===ownerCid)?.name||'',ownCourses=cache.courses.filter(row=>Number(row.company_id)===ownerCid);
- const fields=defs.courses,months=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+ const fields=defs.courses.filter(field=>isHoldingAdmin||field!=='calendar_scope'),months=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
  let events=[],calendarQuery='',tableQuery='',tableOffset=0,requestVersion=0,calendarError='',loading=false;
  el.onclick=null;
- el.innerHTML=`<div class="panel"><h2 id="calendar-title"></h2><p id="calendar-context" class="help"></p><div class="toolbar"><label>نوع تقویم<select id="calendar-scope"><option value="holding">تقویم تجمیعی هلدینگ</option><option value="internal">تقویم داخلی شرکت انتخاب‌شده</option></select></label><label>سال شمسی<select id="calendar-year"></select></label><label>جستجوی تقویم<input id="calendar-search" placeholder="عنوان دوره، شرکت، شایستگی یا مدرس"></label></div><p id="calendar-state" class="help" role="status"></p></div><div id="calendar-grid" class="month-grid"></div><div class="section-title"><div><h2 id="course-management-title"></h2><p class="help">ثبت، ویرایش و حذف فقط برای دوره‌های شرکت انتخاب‌شده انجام می‌شود. سال و نوع تقویم انتخاب‌شده در این فهرست هم اعمال می‌شود.</p></div></div><div class="toolbar"><input id="search" placeholder="جستجو در دوره‌های شرکت…" aria-label="جستجوی دوره‌های شرکت"><div>${user.role!=='viewer'?'<button id="add">＋ ثبت دوره برای این شرکت</button>':''}</div></div><div id="table"></div>`;
+ el.innerHTML=`<div class="panel"><h2 id="calendar-title"></h2><p id="calendar-context" class="help"></p><div class="toolbar">${isHoldingAdmin?'<label>نوع تقویم<select id="calendar-scope"><option value="holding">تقویم تجمیعی هلدینگ</option><option value="internal">تقویم داخلی شرکت انتخاب‌شده</option></select></label>':''}<label>سال شمسی<select id="calendar-year"></select></label><label>جستجوی تقویم<input id="calendar-search" placeholder="عنوان دوره، شرکت، شایستگی یا مدرس"></label></div><p id="calendar-state" class="help" role="status"></p></div><div id="calendar-grid" class="month-grid"></div><div class="section-title"><div><h2 id="course-management-title"></h2><p class="help">ثبت، ویرایش و حذف فقط برای دوره‌های شرکت انتخاب‌شده انجام می‌شود. سال و نوع تقویم انتخاب‌شده در این فهرست هم اعمال می‌شود.</p></div></div><div class="toolbar"><input id="search" placeholder="جستجو در دوره‌های شرکت…" aria-label="جستجوی دوره‌های شرکت"><div>${user.role!=='viewer'?'<button id="add">＋ ثبت دوره برای این شرکت</button>':''}</div></div><div id="table"></div>`;
  const calendarGrid=$('#calendar-grid'),calendarState=$('#calendar-state');
+ const retryCalendar=document.createElement('button');retryCalendar.id='retry-calendar';retryCalendar.type='button';retryCalendar.className='quiet';retryCalendar.textContent='تلاش مجدد برای دریافت تقویم';retryCalendar.hidden=true;calendarState.after(retryCalendar);
  const isCurrent=()=>page==='courses'&&Number(cid)===ownerCid&&$('#calendar-grid')===calendarGrid;
  const dateParts=r=>String(r.date||'').split('/').map(Number);
  const matchesPeriod=r=>(r.calendar_scope||'holding')===courseCalendarScope&&dateParts(r)[0]===courseCalendarYear;
@@ -41,7 +125,7 @@ async function renderCourseCalendar(el){
    const items=visible.filter(r=>dateParts(r)[1]===i+1);
    return `<section class="month-card"><b>${month}</b>${items.length?items.map(r=>`<small class="calendar-event" data-course="${esc(r.id)}"><strong>${esc(r.company_name)}</strong><br>${esc(r.title)}<br>${esc(r.date)} · ${esc(display('status',r.status))}${r.instructor?`<br>مدرس: ${esc(r.instructor)}`:''}${user.role==='admin'&&courseCalendarScope==='holding'?`<br><button type="button" class="quiet" data-plan-course="${esc(r.id)}">برنامه‌ریزی افراد</button>`:''}</small>`).join(''):'<small>دوره‌ای ثبت نشده</small>'}</section>`;
   }).join('');
-  calendarState.className=calendarError?'error':'help';
+  retryCalendar.hidden=!calendarError;calendarState.className=calendarError?'error':'help';
   calendarState.textContent=calendarError?'دریافت تقویم انجام نشد: '+calendarError:loading?'در حال دریافت تقویم…':visible.length?`${visible.length.toLocaleString('fa-IR')} دوره در سال ${courseCalendarYear.toLocaleString('fa-IR',{useGrouping:false})}`:calendarQuery?'دوره‌ای با این جستجو در سال انتخاب‌شده پیدا نشد.':'در سال انتخاب‌شده دوره‌ای در این تقویم ثبت نشده است.';
  }
  function drawOwned(){
@@ -54,7 +138,7 @@ async function renderCourseCalendar(el){
  }
  function describeScope(){
   const holding=courseCalendarScope==='holding';
-  $('#calendar-scope').value=courseCalendarScope;
+  if($('#calendar-scope'))$('#calendar-scope').value=courseCalendarScope;
   $('#calendar-title').textContent=holding?'تقویم آموزشی تجمیعی هلدینگ':`تقویم آموزشی داخلی شرکت ${companyName}`;
   $('#calendar-context').textContent=holding?'این تقویم دوره‌های مشترک همه شرکت‌های هلدینگ را نشان می‌دهد و با انتخاب شرکت در بالای صفحه محدود نمی‌شود. دوره‌های داخلی شرکت‌ها در تقویم داخلی همان شرکت دیده می‌شوند.':`دوره‌های خاص و داخلی شرکت ${companyName} در این تقویم نمایش داده می‌شوند.`;
  }
@@ -66,28 +150,29 @@ async function renderCourseCalendar(el){
    if(!isCurrent()||version!==requestVersion)return;
    events=result;loading=false;setYears();drawCalendar();
   }catch(err){
-   if(!isCurrent()||version!==requestVersion)return;
+   if(err.name==='AbortError'||!isCurrent()||version!==requestVersion||!user)return;
    calendarError=err.message;loading=false;drawCalendar();
   }
  }
- $('#calendar-scope').onchange=async e=>{courseCalendarScope=e.target.value;tableOffset=0;await loadCalendar()};
+ retryCalendar.onclick=()=>loadCalendar();
+ if($('#calendar-scope'))$('#calendar-scope').onchange=async e=>{courseCalendarScope=e.target.value;tableOffset=0;await loadCalendar()};
  $('#calendar-year').onchange=e=>{courseCalendarYear=Number(e.target.value);tableOffset=0;drawCalendar();drawOwned()};
  $('#calendar-search').oninput=e=>{calendarQuery=e.target.value;drawCalendar()};
  calendarGrid.onclick=e=>{const plan=e.target.closest('[data-plan-course]');if(plan&&user.role==='admin'&&isCurrent())openCourseParticipantPlanner(Number(plan.dataset.planCourse))};
  $('#search').oninput=e=>{tableQuery=e.target.value;tableOffset=0;drawOwned()};
  if($('#add'))$('#add').onclick=()=>{if(isCurrent())openForm({calendar_scope:courseCalendarScope})};
  $('#table').onclick=async e=>{
-  if(user.role==='viewer'||!isCurrent())return;
+  if(user.role==='viewer'||!isCurrent()||workspaceSaving)return;
   const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');
   if(edit){const row=ownCourses.find(r=>r.id===Number(edit.dataset.edit));if(row)openForm(row)}
   if(del&&ownCourses.some(r=>r.id===Number(del.dataset.delete))&&confirm('این دوره حذف شود؟')){
-   try{await api('data/courses/'+encodeURIComponent(del.dataset.delete)+'?company_id='+ownerCid,{method:'DELETE'});if(isCurrent())await render()}catch(err){notice(err.message)}
+   const unlock=workspaceWriteLock(el);try{await api('data/courses/'+encodeURIComponent(del.dataset.delete)+'?company_id='+ownerCid,{method:'DELETE'});if(isCurrent())await workspaceRefresh(()=>render(),'دوره حذف شد.')}catch(err){notice(err.message)}finally{unlock()}
   }
  };
  await loadCalendar();
 }
 async function openCourseParticipantPlanner(courseId){
- if(user.role!=='admin'||$('#course-participant-dialog'))return;
+ if(user.role!=='admin'||workspaceSaving||$('#course-participant-dialog'))return;
  const dialog=document.createElement('dialog');dialog.id='course-participant-dialog';dialog.setAttribute('aria-labelledby','participant-title');
  dialog.innerHTML='<form id="course-participant-form"><div class="dialog-head"><h2 id="participant-title">برنامه‌ریزی افراد دوره مشترک</h2><button type="button" class="quiet" data-plan-close>✕</button></div><p id="participant-course" class="help"></p><p class="help">نام پرسنل همه شرکت‌های هلدینگ برای برنامه‌ریزی آموزش مشترک در دسترس ادمین است. انتخاب افراد در این بخش، برنامه حضور آنان در دوره را مشخص می‌کند؛ ثبت حضور و سوابق آموزشی جداگانه انجام می‌شود.</p><div id="participant-controls" hidden><div class="toolbar"><label>جستجوی نام، کد، شغل یا شرکت<input id="participant-search" placeholder="جستجوی پرسنل هلدینگ"></label><label>فیلتر شرکت<select id="participant-company"><option value="">همه شرکت‌ها</option></select></label></div><p id="participant-selected" class="help" role="status"></p><div id="participant-table"></div></div><p id="participant-error" class="error" role="alert"></p><p id="participant-loading" class="help">در حال دریافت فهرست پرسنل هلدینگ…</p><div class="toolbar"><button type="submit" id="save-course-participants" disabled>ذخیره برنامه‌ریزی افراد</button><button type="button" class="quiet" data-plan-close>انصراف</button></div></form>';
  document.body.append(dialog);dialog.showModal();let saving=false;
@@ -116,14 +201,28 @@ async function openCourseParticipantPlanner(courseId){
   dialog.querySelector('#participant-company').onchange=e=>{companyFilter=e.target.value;offset=0;draw()};
   table.onchange=e=>{if(e.target.matches('[data-participant]')){const id=Number(e.target.dataset.participant);if(e.target.checked)selected.add(id);else selected.delete(id);draw()}};
   dialog.querySelector('form').onsubmit=async e=>{
-   e.preventDefault();if(saving)return;saving=true;save.disabled=true;error.textContent='';
-   dialog.querySelectorAll('[data-plan-close]').forEach(button=>button.disabled=true);
+   e.preventDefault();if(saving)return;saving=true;const unlock=workspaceWriteLock(dialog);error.textContent='';
    try{await api('courses/'+courseId+'/participants',{method:'PUT',body:{employee_ids:[...selected]}});dialog.close();notice('برنامه‌ریزی افراد دوره مشترک ذخیره شد.')}
    catch(err){error.textContent=err.message}
-   finally{saving=false;save.disabled=false;dialog.querySelectorAll('[data-plan-close]').forEach(button=>button.disabled=false)}
+   finally{saving=false;unlock()}
   };
  }catch(err){if(dialog.isConnected){dialog.querySelector('#participant-loading').hidden=true;dialog.querySelector('#participant-error').textContent=err.message}}
 }
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-function openForm(row={}){userReset=null;editId=row.id||null;$('#form-title').textContent=(editId?'ویرایش ':'ثبت ')+menus.find(m=>m[0]===page)[2];$('#form-error').textContent='';$('#fields').innerHTML=defs[page].map(k=>{let choices=null;if(k==='skill_id')choices=cache.skills.map(r=>[r.id,r.title]);if(k==='employee_id')choices=cache.employees.map(r=>[r.id,r.name+' · '+r.code]);if(k==='course_id')choices=cache.courses.map(r=>[r.id,r.title]);if(k==='company_id')choices=user.companies.map(r=>[r.id,r.name]);if(k==='role')choices=[['manager','مسئول آموزش'],['viewer','مشاهده‌گر']];if(k==='calendar_scope')choices=[['holding','تجمیعی هلدینگ'],['internal','داخلی شرکت (موارد خاص)']];if(k==='status')choices=[['planned','برنامه‌ریزی‌شده'],['approved','مصوب'],['completed','برگزارشده'],['cancelled','لغوشده']];if(k==='level')choices=[[0,'۰ · ارزیابی‌نشده'],[1,'I · آشنایی'],[2,'L · یادگیری'],[3,'U · کاربرد'],[4,'O · تسلط']];let type=k==='password'?'password':['importance','hours','cost','score','reaction','behavior','result'].includes(k)?'number':'text';const optional=['department','job','category','instructor','score','reaction','behavior','result'];let min={importance:1,hours:0.01,cost:0,score:0,reaction:1,behavior:1,result:0}[k],max={importance:3,score:100,reaction:5,behavior:5,result:100}[k];return `<label>${labels[k]}${choices?`<select name="${k}" required>${choices.map(c=>`<option value="${esc(c[0])}" ${String(row[k])===String(c[0])?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`:`<input name="${k}" type="${type}" value="${esc(row[k]??(k==='importance'?1:k==='cost'?0:''))}" ${optional.includes(k)?'':'required'} ${k==='password'?'minlength="12"':''} ${type==='number'?'step="any"':''} ${min!==undefined?`min="${min}"`:''} ${max!==undefined?`max="${max}"`:''}>`}</label>`}).join('');$('#dialog').showModal()}
-$('#entry').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));for(const k of Object.keys(d)){if(d[k]===''){if(['score','reaction','behavior','result'].includes(k))d[k]=null}else if(['company_id','employee_id','skill_id','course_id','level','importance','hours','cost','score','reaction','behavior','result'].includes(k))d[k]=Number(d[k])}try{if(userReset){await api('users/'+userReset,{method:'PUT',body:{password:d.password}});userReset=null;$('#dialog').close();notice('رمز عبور تغییر کرد');return}await api(page==='users'?'users':scoped('data/'+page+(editId?'/'+editId:'')),{method:editId?'PUT':'POST',body:d});$('#dialog').close();await render();notice('اطلاعات با موفقیت ذخیره شد')}catch(e){$('#form-error').textContent=e.message}};
+function openForm(row={}){if(!user||user.role==='viewer'||$('#entry').dataset.busy)return;entryContext={page,cid:Number(cid),account:user};userReset=null;editId=row.id||null;$('#form-title').textContent=(editId?'ویرایش ':'ثبت ')+menus.find(m=>m[0]===page)[2];$('#form-error').textContent='';$('#fields').innerHTML=defs[page].map(k=>{let choices=null;if(k==='skill_id')choices=cache.skills.map(r=>[r.id,r.title]);if(k==='employee_id')choices=cache.employees.map(r=>[r.id,r.name+' · '+r.code]);if(k==='course_id')choices=cache.courses.map(r=>[r.id,r.title]);if(k==='company_id')choices=user.companies.map(r=>[r.id,r.name]);if(k==='role')choices=[['manager','مسئول آموزش'],['viewer','مشاهده‌گر']];if(k==='calendar_scope')choices=user.role==='admin'?[['holding','تجمیعی هلدینگ'],['internal','داخلی شرکت (موارد خاص)']]:[['internal','داخلی شرکت']];if(k==='status')choices=[['planned','برنامه‌ریزی‌شده'],['approved','مصوب'],['completed','برگزارشده'],['cancelled','لغوشده']];if(k==='level')choices=[[0,'۰ · ارزیابی‌نشده'],[1,'I · آشنایی'],[2,'L · یادگیری'],[3,'U · کاربرد'],[4,'O · تسلط']];let type=k==='password'?'password':['importance','hours','cost','score','reaction','behavior','result'].includes(k)?'number':'text';const optional=['department','job','category','instructor','score','reaction','behavior','result'];let min={importance:1,hours:0.01,cost:0,score:0,reaction:1,behavior:1,result:0}[k],max={importance:3,score:100,reaction:5,behavior:5,result:100}[k];return `<label>${labels[k]}${choices?`<select name="${k}" required ${k==='calendar_scope'&&user.role!=='admin'?'disabled':''}>${choices.map(c=>`<option value="${esc(c[0])}" ${String(row[k])===String(c[0])?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`:`<input name="${k}" type="${type}" value="${esc(row[k]??(k==='importance'?1:k==='cost'?0:k==='year'?currentJalaliYear():k==='date'&&page==='courses'?currentJalaliDate():''))}" ${optional.includes(k)?'':'required'} ${k==='password'?'minlength="12"':''} ${type==='number'?'step="any"':''} ${min!==undefined?`min="${min}"`:''} ${max!==undefined?`max="${max}"`:''}>`}</label>`}).join('');$('#dialog').showModal()}
+$('#entry').onsubmit=async e=>{
+ e.preventDefault();const form=e.target;if(form.dataset.busy)return;
+ const owner=entryContext;if(!owner||owner.account!==user||owner.page!==page||owner.cid!==Number(cid)){$('#form-error').textContent='فضای کاری تغییر کرده است؛ فرم را دوباره باز کنید.';return}
+ const recordId=editId,passwordUserId=userReset,d=Object.fromEntries(new FormData(form));
+ if(owner.page==='courses'&&user.role!=='admin')d.calendar_scope='internal';
+ for(const k of Object.keys(d)){if(d[k]===''){if(['score','reaction','behavior','result'].includes(k))d[k]=null}else if(['company_id','employee_id','skill_id','course_id','level','importance','hours','cost','score','reaction','behavior','result'].includes(k))d[k]=Number(d[k])}
+ setFormBusy(form,true);const isCurrent=()=>owner.account===user&&owner.page===page&&owner.cid===Number(cid);
+ try{
+  const path=passwordUserId?'users/'+passwordUserId:owner.page==='users'?'users':'data/'+owner.page+(recordId?'/'+recordId:'')+'?company_id='+owner.cid;
+  await api(path,{method:passwordUserId||recordId?'PUT':'POST',body:passwordUserId?{password:d.password}:d});
+  if(!isCurrent())return;userReset=null;$('#dialog').close();
+  if(passwordUserId){notice('رمز عبور تغییر کرد');return}
+  const rendered=await renderCurrent();if(isCurrent())notice(rendered?'اطلاعات با موفقیت ذخیره شد':'اطلاعات ذخیره شد؛ دریافت دوباره این بخش ناموفق بود. از تلاش مجدد استفاده کنید.');
+ }catch(err){if(isCurrent()&&err.name!=='AbortError')$('#form-error').textContent=err.message}
+ finally{setFormBusy(form,false)}
+};

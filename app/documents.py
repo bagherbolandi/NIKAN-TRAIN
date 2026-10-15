@@ -1,6 +1,7 @@
 """Stable contract document references, independent personal amendments and XLSX reports."""
 import io,json
 from flask import request,jsonify,g,Response
+from .validation import json_object,positive_id
 FIELDS=['purpose','definition','supervisor','duties','commitments','authority','education','experience','legal','hse','equipment','conditions','performance','contract_notes','effective_date','review_date','revision','approved_by']
 
 def document_view(conn,cid,eid,master):
@@ -28,14 +29,16 @@ CREATE TABLE IF NOT EXISTS personal_documents(employee_id INTEGER PRIMARY KEY RE
  @app.route('/api/passports/<int:eid>/document',methods=['GET','PUT','DELETE'])
  @authenticated
  def personal(eid):
-  cid=company();employee=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
+  cid=company();eid=positive_id(eid);employee=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not employee:return error('فرد یافت نشد',404)
   master=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,employee['job'])).fetchone()
   if request.method!='GET':
    if g.user['role']=='viewer':raise PermissionError()
    if request.method=='DELETE':db().execute('DELETE FROM personal_documents WHERE employee_id=? AND company_id=?',(eid,cid))
    else:
-    data=request.get_json() or {};values=data.get('overrides',{})
+    data=json_object()
+    if set(data)!={'overrides'}:raise ValueError('اصلاحات اختصاصی شناسنامه را ارسال کنید')
+    values=data['overrides']
     if not isinstance(values,dict) or any(k not in FIELDS or not isinstance(v,str) or len(v)>10000 for k,v in values.items()):raise ValueError('اطلاعات اختصاصی شناسنامه معتبر نیست')
     db().execute("INSERT INTO personal_documents(employee_id,company_id,overrides,revision) VALUES (?,?,?,1) ON CONFLICT(employee_id) DO UPDATE SET overrides=excluded.overrides,revision=personal_documents.revision+1,updated=CURRENT_TIMESTAMP",(eid,cid,json.dumps(values,ensure_ascii=False)))
    audit('personal_document_'+request.method,cid,str(eid));db().commit()
@@ -43,13 +46,15 @@ CREATE TABLE IF NOT EXISTS personal_documents(employee_id INTEGER PRIMARY KEY RE
  @app.route('/api/passports/<int:eid>/requirements',methods=['GET','PUT','DELETE'])
  @authenticated
  def personal_requirements(eid):
-  cid=company();e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
+  cid=company();eid=positive_id(eid);e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   if request.method!='GET':
    if g.user['role']=='viewer':raise PermissionError()
    if request.method=='DELETE':db().execute('DELETE FROM personal_requirements WHERE employee_id=?',(eid,))
    else:
-    items=(request.get_json() or {}).get('items')
+    data=json_object()
+    if set(data)!={'items'}:raise ValueError('فهرست الزامات را ارسال کنید')
+    items=data['items']
     if not isinstance(items,list) or len(items)>2000:raise ValueError('فهرست الزامات معتبر نیست')
     seen=set()
     for item in items:

@@ -2,6 +2,7 @@
 import io,zipfile
 from pathlib import Path
 from flask import request,jsonify,Response,session,g
+from .validation import json_object, positive_id
 SCHEMA='''
 CREATE TABLE IF NOT EXISTS holding_competencies(code TEXT PRIMARY KEY,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT '',importance INTEGER NOT NULL DEFAULT 1,method TEXT NOT NULL DEFAULT '',reference TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS holding_catalog_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -37,7 +38,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   if request.method=='GET':return jsonify([dict(r) for r in db().execute('SELECT * FROM holding_competencies ORDER BY code')])
   if g.user['role']!='admin':raise PermissionError()
   from .catalog import bank_values
-  d=bank_values(request.get_json() or {},creating=True)
+  d=bank_values(json_object(),creating=True)
   db().execute('INSERT INTO holding_competencies VALUES (?,?,?,?,?,?)',(d['code'],d['title'],d.get('category',''),int(d.get('importance',1)),d.get('method',''),d.get('reference','')));audit('holding_competency_created',detail=d['code']);db().commit();return jsonify(ok=True),201
  @app.post('/api/competency-bank/adopt')
  @authenticated
@@ -58,7 +59,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.get('/api/passports/<int:eid>')
  @authenticated
  def passport(eid):
-  cid=company();e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
+  cid=company();eid=positive_id(eid);e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   job=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,e['job'])).fetchone();meta=db().execute('SELECT * FROM employee_meta WHERE employee_id=? AND company_id=?',(eid,cid)).fetchone()
   matrix=db().execute('''SELECT s.id,b.code,b.title,b.category,COALESCE(p.level,r.level,0) required,MAX(COALESCE(a.level,0),COALESCE((SELECT MAX(t.level) FROM records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0)) current FROM skills s JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN personal_requirements p ON p.skill_id=s.id AND p.employee_id=? LEFT JOIN assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL OR p.employee_id IS NOT NULL) ORDER BY b.category,b.code''',(eid,cid,e['job'],eid,eid,cid)).fetchall()
@@ -72,10 +73,12 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.put('/api/passports/<int:eid>/approval')
  @authenticated
  def approval(eid):
-  cid=company()
+  cid=company();eid=positive_id(eid)
   if g.user['role']=='viewer':raise PermissionError()
   validate_refs('employee_meta',{'employee_id':eid},cid)
-  d=request.get_json() or {};job=str(d.get('job','')).strip()
+  d=json_object();job=d.get('job')
+  if not isinstance(job,str) or not job.strip():raise ValueError('سمت فرد را انتخاب کنید')
+  job=job.strip()
   if not db().execute('SELECT 1 FROM job_profiles WHERE company_id=? AND job=?',(cid,job)).fetchone():raise ValueError('ابتدا شناسنامه این سمت را تعریف کنید')
   db().execute('UPDATE employees SET job=? WHERE id=? AND company_id=?',(job,eid,cid))
   db().execute('INSERT INTO employee_meta(employee_id,company_id,hr_approved) VALUES (?,?,1) ON CONFLICT(employee_id) DO UPDATE SET hr_approved=1',(eid,cid));audit('hr_job_approved',cid,str(eid));db().commit();return jsonify(ok=True)
@@ -85,7 +88,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   cid=company()
   if request.method=='GET':return jsonify([dict(r) for r in db().execute('SELECT c.id,c.employee_id,c.course_id,c.title,c.issuer,c.issued,c.expires,c.filename,c.created,e.name employee_name FROM certificates c JOIN employees e ON e.id=c.employee_id WHERE c.company_id=? ORDER BY c.id DESC',(cid,))])
   if g.user['role']=='viewer':raise PermissionError()
-  eid=request.form.get('employee_id',type=int);course=request.form.get('course_id',type=int)
+  eid=positive_id(request.form.get('employee_id'));raw_course=request.form.get('course_id');course=positive_id(raw_course) if raw_course not in (None,'') else None
   validate_refs('certificates',{'employee_id':eid,**({'course_id':course} if course else {})},cid)
   title=request.form.get('title','').strip();f=request.files.get('file')
   if not title or not f:raise ValueError('فرد، عنوان و فایل گواهینامه الزامی است')
@@ -98,7 +101,7 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.route('/api/certificates/<int:rid>',methods=['GET','DELETE'])
  @authenticated
  def certificate(rid):
-  cid=company();r=db().execute('SELECT * FROM certificates WHERE id=? AND company_id=?',(rid,cid)).fetchone()
+  cid=company();rid=positive_id(rid);r=db().execute('SELECT * FROM certificates WHERE id=? AND company_id=?',(rid,cid)).fetchone()
   if not r:return error('گواهینامه یافت نشد',404)
   if request.method=='DELETE':
    if g.user['role']=='viewer':raise PermissionError()
