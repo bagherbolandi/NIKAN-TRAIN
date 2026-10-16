@@ -1,4 +1,5 @@
 from test_catalog import ready
+import sqlite3
 
 
 def test_invalid_document_ids_are_controlled(ready):
@@ -48,3 +49,18 @@ def test_invalid_personal_requirements_do_not_attach_or_partially_update(ready):
         assert response.status_code == 400, (payload, response.status_code)
         assert client.get(path).json == before
         assert client.get('/api/data/skills?company_id=1').json == skills
+
+
+def test_exhausted_personal_reference_counter_rejects_insert_atomically(ready):
+    app, client, headers = ready
+    with sqlite3.connect(app.config['DB']) as connection:
+        connection.execute('UPDATE company_registry SET passport_high_watermark=9223372036854775807')
+        before = connection.execute('SELECT count(*) FROM employees').fetchone()[0]
+    response = client.post('/api/data/employees?company_id=1', headers=headers,
+                           json={'code': 'EXHAUSTED', 'name': 'Must not be created'})
+    assert response.status_code == 400
+    assert response.is_json
+    with sqlite3.connect(app.config['DB']) as connection:
+        assert connection.execute('SELECT count(*) FROM employees').fetchone()[0] == before
+        assert connection.execute('SELECT passport_high_watermark FROM company_registry').fetchone()[0] == 9223372036854775807
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []

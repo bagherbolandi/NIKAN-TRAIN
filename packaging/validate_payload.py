@@ -1,5 +1,5 @@
 """Run with the bundled Windows interpreter after installation."""
-import sys,tempfile,threading,urllib.request,json,argparse
+import sys,tempfile,threading,urllib.request,json,argparse,io,zipfile
 from pathlib import Path
 parser=argparse.ArgumentParser()
 parser.add_argument('--install',type=Path,help='Extracted or installed application directory')
@@ -63,6 +63,31 @@ with tempfile.TemporaryDirectory() as root:
  assert response.status_code==200,response.json
  assert {r['id'] for r in c.get(roster).json['participants']}==set(employees)
  assert c.get('/api/data/records?company_id=1').json==[]
+ # Exercise the packaged spreadsheet renderer/parser and Word dependencies.
+ import openpyxl
+ forms=c.get('/api/excel/forms?company_id=1').json
+ assert {'employees','job_profiles','personal_documents','assessments','courses','records'}.issubset({r['kind'] for r in forms})
+ job_fields=[field['key'] for field in next(r for r in forms if r['kind']=='job_profiles')['columns'] if field['key'] not in ('job','department')]
+ assert job_fields==[field['key'] for field in next(r for r in forms if r['kind']=='personal_documents')['columns'] if field['key']!='employee_code']
+ workbook=openpyxl.load_workbook(io.BytesIO(c.get('/api/excel/templates/assessments?company_id=1').data))
+ sheet=workbook['ورود اطلاعات'];keys={cell.value:cell.column for cell in sheet[5]}
+ for key,value in {'employee_code':'P-1','skill_code':'PAYLOAD-SHARED','level':3}.items():sheet.cell(7,keys[key],value)
+ output=io.BytesIO();workbook.save(output);payload=output.getvalue();workbook.close()
+ def spreadsheet(mode):return c.post('/api/excel/import/assessments?company_id=1',headers=h,data={'mode':mode,'policy':'upsert','file':(io.BytesIO(payload),'assessment.xlsx')})
+ preview=spreadsheet('preview');assert preview.status_code==200 and preview.json['can_commit'],preview.json
+ assert c.get('/api/data/assessments?company_id=1').json==[]
+ applied=spreadsheet('commit');assert applied.status_code==200 and applied.json['applied'],applied.json
+ assert spreadsheet('commit').json['unchanged']==1
+ document_path=f'/api/passports/{employees[0]}/document?company_id=1'
+ assert c.put(document_path,headers=h,json={'overrides':{'duties':'Actual personal duties for the contract'}}).status_code==200
+ document=c.get(document_path).json;assert document['number'].startswith('NP-') and document['is_snapshot']
+ before_export=c.get(document_path).json
+ for suffix in ('commitment.docx','profile.docx'):
+  response=c.get(f'/api/passports/{employees[0]}/{suffix}?company_id=1');assert response.status_code==200,response.json
+  with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+   text=archive.read('word/document.xml').decode();assert 'Actual personal duties for the contract' in text and document['number'] in text
+ assert c.get(document_path).json==before_export
+ assert c.get(f'/api/passports/{employees[0]}/commitment?company_id=1').status_code==200
  assert c.delete('/api/competency-bank/PAYLOAD-SHARED',headers=h).status_code==409
  assert c.delete('/api/companies/1',headers=h).status_code==409
  assert c.get('/api/companies').json==original_companies
@@ -72,6 +97,9 @@ with tempfile.TemporaryDirectory() as root:
   scoped=app.test_client();assert scoped.post('/api/login',json={'username':name,'password':'Temporary-role-password-123'}).status_code==200
   sh={'X-CSRF-Token':scoped.get('/api/me').json['csrf']}
   assert scoped.get('/api/companies').status_code==403
+  assert scoped.get('/api/excel/templates/competency-bank?company_id=2').status_code==403
+  assert scoped.get(f'/api/passports/{employees[0]}/commitment.docx?company_id=1').status_code==403
+  if role=='viewer':assert scoped.post('/api/excel/import/employees?company_id=2',headers=sh).status_code==403
   assert scoped.post('/api/companies',headers=sh,json={'name':'Forbidden company'}).status_code==403
   assert scoped.put('/api/companies/2',headers=sh,json={'name':'Forbidden rename'}).status_code==403
   assert scoped.delete('/api/companies/2',headers=sh).status_code==403
@@ -115,7 +143,7 @@ with tempfile.TemporaryDirectory() as root:
  import sqlite3
  with sqlite3.connect(restored_dir/'nikan.sqlite3') as restored_db:
   assert restored_db.execute('SELECT count(*) FROM company_registry').fetchone()[0]==1
- print('Standalone 0.8 features passed: admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.')
+ print('Standalone 0.9 features passed: branded Excel templates, atomic preview/import and repeat safety, matching full job/person fields, short personal references, independent actual snapshots, readonly full/commitment Word exports, company/role/calendar protection and SQLite backup recovery.')
  server=create_server(app,host='127.0.0.1',port=0);thread=threading.Thread(target=server.run,daemon=True);thread.start()
  try:
   with urllib.request.urlopen(f'http://127.0.0.1:{server.effective_port}/api/status') as response:assert response.status==200

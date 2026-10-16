@@ -25,7 +25,21 @@ def legacy_archive(tmp_path):
  source=sqlite3.connect(app.config['DB']);destination=sqlite3.connect(snapshot)
  try:
   source.backup(destination)
-  destination.executescript('DROP TABLE course_participants; DROP TABLE holding_catalog_state; DROP TABLE company_registry; DROP INDEX courses_calendar_scope; ALTER TABLE courses DROP COLUMN calendar_scope;')
+  # Recreate the archived pre-registry schema, including its independent triggers.
+  # Current passport triggers reference the counter table and cannot remain in a
+  # database that intentionally models a version without that table.
+  destination.executescript('''DROP TRIGGER employee_passport_created;
+DROP TRIGGER employee_passport_updated;
+DROP TRIGGER course_external_code_created;
+DROP INDEX courses_external_code;
+ALTER TABLE courses DROP COLUMN external_code;
+ALTER TABLE employees DROP COLUMN passport_legacy_number;
+ALTER TABLE personal_documents DROP COLUMN is_snapshot;
+DROP TABLE course_participants;
+DROP TABLE holding_catalog_state;
+DROP TABLE company_registry;
+DROP INDEX courses_calendar_scope;
+ALTER TABLE courses DROP COLUMN calendar_scope;''')
  finally:destination.close();source.close()
  key=secrets.token_bytes(32);keyfile=tmp_path/'old-recovery.key';keyfile.write_bytes(key)
  archive=tmp_path/'old-encrypted.nikbak';header=encrypt(snapshot,archive,key)

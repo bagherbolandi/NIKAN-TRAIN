@@ -1,5 +1,5 @@
 """Exercise the installed HTTPS server with verified TLS, concurrent users and real recovery."""
-import argparse,json,sys,time,ssl,secrets,urllib.request,urllib.error,http.cookiejar,tempfile,subprocess
+import argparse,json,sys,time,ssl,secrets,urllib.request,urllib.error,http.cookiejar,tempfile,subprocess,io,zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -20,6 +20,14 @@ def validate(install,root):
     body=response.read();return body if raw else json.loads(body)
   def login(self,user,password):
    self.request('/api/login',{'username':user,'password':password});self.csrf=self.request('/api/me')['csrf']
+  def spreadsheet(self,path,payload,mode):
+   boundary='NikanValidation'+secrets.token_hex(12);parts=[]
+   for name,value in (('mode',mode),('policy','upsert')):
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+   parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="assessment.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n'.encode()+payload+b'\r\n')
+   parts.append(f'--{boundary}--\r\n'.encode())
+   request=urllib.request.Request(base+path,data=b''.join(parts),headers={'X-CSRF-Token':self.csrf,'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
+   with self.opener.open(request,timeout=45) as response:return json.loads(response.read())
  admin=Client();deadline=time.monotonic()+45
  while True:
   try:status=admin.request('/api/status');break
@@ -103,6 +111,28 @@ def validate(install,root):
  conn=sqlite3.connect(root/'nikan.sqlite3');eid=conn.execute('SELECT id FROM employees LIMIT 1').fetchone()[0]
  conn.execute("INSERT INTO certificates(company_id,employee_id,title,filename,mime,content) VALUES (1,?,'Payload certificate','certificate.pdf','application/pdf',?)",(eid,b'%PDF-native-network-proof'));conn.commit();conn.close()
  admin.request(f'/api/passports/{eid}/document?company_id=1',{'overrides':{'commitments':'Native independent commitment'}},'PUT')
+ # Actual XLSX multipart requests must validate without writing and commit once.
+ import openpyxl
+ forms=admin.request('/api/excel/forms?company_id=1')
+ assert {'employees','job_profiles','personal_documents','assessments','courses','records'}.issubset({r['kind'] for r in forms})
+ workbook=openpyxl.load_workbook(io.BytesIO(admin.request('/api/excel/templates/assessments?company_id=1',raw=True)))
+ sheet=workbook['ورود اطلاعات'];keys={cell.value:cell.column for cell in sheet[5]}
+ for field,value in {'employee_code':'NET-000','skill_code':'NET-SHARED','level':3}.items():sheet.cell(7,keys[field],value)
+ output=io.BytesIO();workbook.save(output);workbook.close();payload=output.getvalue()
+ preview=admin.spreadsheet('/api/excel/import/assessments?company_id=1',payload,'preview');assert preview['can_commit']
+ assert admin.request('/api/data/assessments?company_id=1')==[]
+ assert admin.spreadsheet('/api/excel/import/assessments?company_id=1',payload,'commit')['applied']
+ assert admin.spreadsheet('/api/excel/import/assessments?company_id=1',payload,'commit')['unchanged']==1
+ document_path=f'/api/passports/{eid}/document?company_id=1';before_export=admin.request(document_path)
+ assert before_export['number'].startswith('NP-') and before_export['is_snapshot']
+ for suffix in ('commitment.docx','profile.docx'):
+  blob=admin.request(f'/api/passports/{eid}/{suffix}?company_id=1',raw=True)
+  with zipfile.ZipFile(io.BytesIO(blob)) as archive:assert 'Native independent commitment' in archive.read('word/document.xml').decode()
+ assert admin.request(document_path)==before_export
+ for scoped in (manager,viewer):
+  rejected(scoped,'/api/excel/templates/competency-bank?company_id=2',403)
+  rejected(scoped,f'/api/passports/{eid}/commitment.docx?company_id=1',403)
+ rejected(viewer,'/api/excel/import/employees?company_id=2',403,{},'POST')
  before={f['name'] for f in admin.request('/api/network/backups')['files']};admin.request('/api/network/backups',{},'POST')
  deadline=time.monotonic()+60
  while True:
@@ -129,7 +159,7 @@ def validate(install,root):
   assert c.get(f'/api/passports/{eid}?company_id=1').json['job']['commitments']=='Native independent commitment'
   assert c.get('/api/certificates/1?company_id=1').data==b'%PDF-native-network-proof'
   assert c.get('/api/companies').json==original_companies
- print('Network 0.8 payload passed: verified HTTPS, 16 concurrent writes, admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document/company-registry recovery, active-server protection.')
+ print('Network 0.9 payload passed: verified HTTPS, 16 concurrent writes, Excel multipart preview/import/repeat safety, short personal references and actual snapshots, readonly full/commitment Word exports, protected company/calendar/bank scopes, encrypted backup and full recovery, active-server protection.')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--install',type=Path,required=True);p.add_argument('--data-dir',type=Path,required=True);a=p.parse_args();validate(a.install,a.data_dir)

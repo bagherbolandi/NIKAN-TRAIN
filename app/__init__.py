@@ -282,10 +282,14 @@ def create_app(data_dir=None,testing=False):
  register_branding(app,db,authenticated,audit,error)
  from .documents import register as register_documents
  register_documents(app,db,authenticated,company,audit,error,gaps)
+ from .commitments import register as register_commitments
+ register_commitments(app,db,authenticated,company,error)
  from .training_calendar import register as register_training_calendar
  register_training_calendar(app,db,authenticated,company)
  from .holding_planning import register as register_holding_planning
  register_holding_planning(app,db,authenticated,audit,error)
  from .companies import register as register_companies
  register_companies(app,db,authenticated,audit,error)
+ from .excel_forms import register as register_excel_forms
+ register_excel_forms(app,db,authenticated,company,audit,error,validate_refs)
  return app

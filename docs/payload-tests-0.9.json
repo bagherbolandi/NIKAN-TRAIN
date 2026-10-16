@@ -1,0 +1,29 @@
+{
+  "platform": "Linux Python 3.12.14 and Chromium",
+  "native_windows_executed": false,
+  "standalone": {
+    "execution": "Actual extracted desktop/app with standalone-only dependencies",
+    "checks": {
+      "payload": {
+        "passed": true,
+        "output": "Standalone 0.9 features passed: branded Excel templates, atomic preview/import and repeat safety, matching full job/person fields, short personal references, independent actual snapshots, readonly full/commitment Word exports, company/role/calendar protection and SQLite backup recovery.\nPayload validation passed: linux 3.12.14\nPackaged desktop: browser handoff survival, server readiness and clean shutdown passed."
+      },
+      "excel": {
+        "passed": true,
+        "output": "Excel browser passed: branded real XLSX template, invalid-row atomic preview, single final import, explicit upsert preserving IDs, file/kind/company approval reset, draft retention, contextual/legacy paths, manager scope and viewer download-only, mobile layout.\nPASS: excel browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "commitment": {
+        "passed": true,
+        "output": "Commitment browser passed: identical complete18field forms/Word layouts, separate compact8section annex, independent actual snapshot including blank, short reference, branded DOCX and escaped HTML preview, print button and A4PDF, desktop/mobile, export read-only and company/viewer scope.\nPASS: commitment browser workflow on extracted standalone desktop with standalone-only dependencies"
+      }
+    }
+  },
+  "network": {
+    "platform": "linux",
+    "scope": "Extracted application using Linux development Python and verified HTTPS; Windows installer execution not tested.",
+    "validator_exit_code": 0,
+    "stop_command_exit_code": 0,
+    "server_exit_code": 0
+  },
+  "network_output": "Network 0.9 payload passed: verified HTTPS, 16 concurrent writes, Excel multipart preview/import/repeat safety, short personal references and actual snapshots, readonly full/commitment Word exports, protected company/calendar/bank scopes, encrypted backup and full recovery, active-server protection."
+}
