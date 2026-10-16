@@ -136,7 +136,7 @@ async function renderCourseCalendar(el){
   const visible=events.filter(r=>dateParts(r)[0]===courseCalendarYear&&[r.title,r.company_name,r.skill_title,r.instructor,r.date,display('status',r.status)].some(v=>searchMatch(v,calendarQuery))).sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.id)-Number(b.id));
   calendarGrid.innerHTML=months.map((month,i)=>{
    const items=visible.filter(r=>dateParts(r)[1]===i+1);
-   return `<section class="month-card"><b>${month}</b>${items.length?items.map(r=>`<small class="calendar-event" data-course="${esc(r.id)}"><strong>${esc(r.company_name)}</strong><br>${esc(r.title)}<br>${esc(r.date)} · ${esc(display('status',r.status))}${r.instructor?`<br>مدرس: ${esc(r.instructor)}`:''}${user.role==='admin'&&courseCalendarScope==='holding'?`<br><button type="button" class="quiet" data-plan-course="${esc(r.id)}">برنامه‌ریزی افراد</button>`:''}</small>`).join(''):'<small>دوره‌ای ثبت نشده</small>'}</section>`;
+   return `<section class="month-card"><b>${month}</b>${items.length?items.map(r=>`<small class="calendar-event" data-course="${esc(r.id)}"><strong>${esc(r.company_name)}</strong><br>${esc(r.title)}<br>${esc(r.date)} · ${esc(display('status',r.status))}${r.instructor?`<br>مدرس: ${esc(r.instructor)}`:''}${user.role==='admin'&&courseCalendarScope==='holding'?`<br><button type="button" class="quiet" data-plan-course="${esc(r.id)}">برنامه‌ریزی افراد</button> <button type="button" class="quiet" data-attendance-course="${esc(r.id)}">حضور و تسهیم هزینه</button>`:''}</small>`).join(''):'<small>دوره‌ای ثبت نشده</small>'}</section>`;
   }).join('');
   retryCalendar.hidden=!calendarError;calendarState.className=calendarError?'error':'help';
   calendarState.textContent=calendarError?'دریافت تقویم انجام نشد: '+calendarError:loading?'در حال دریافت تقویم…':visible.length?`${visible.length.toLocaleString('fa-IR')} دوره در سال ${courseCalendarYear.toLocaleString('fa-IR',{useGrouping:false})}`:calendarQuery?'دوره‌ای با این جستجو در سال انتخاب‌شده پیدا نشد.':'در سال انتخاب‌شده دوره‌ای در این تقویم ثبت نشده است.';
@@ -171,7 +171,7 @@ async function renderCourseCalendar(el){
  if($('#calendar-scope'))$('#calendar-scope').onchange=async e=>{courseCalendarScope=e.target.value;tableOffset=0;await loadCalendar()};
  $('#calendar-year').onchange=e=>{courseCalendarYear=Number(e.target.value);tableOffset=0;drawCalendar();drawOwned()};
  $('#calendar-search').oninput=e=>{calendarQuery=e.target.value;drawCalendar()};
- calendarGrid.onclick=e=>{const plan=e.target.closest('[data-plan-course]');if(plan&&user.role==='admin'&&isCurrent())openCourseParticipantPlanner(Number(plan.dataset.planCourse))};
+ calendarGrid.onclick=e=>{if(user.role!=='admin'||!isCurrent())return;const plan=e.target.closest('[data-plan-course]'),attendance=e.target.closest('[data-attendance-course]');if(plan)openCourseParticipantPlanner(Number(plan.dataset.planCourse));if(attendance)openCourseAttendance(Number(attendance.dataset.attendanceCourse))};
  $('#search').oninput=e=>{tableQuery=e.target.value;tableOffset=0;drawOwned()};
  if($('#add'))$('#add').onclick=()=>{if(isCurrent())openForm({calendar_scope:courseCalendarScope})};
  $('#table').onclick=async e=>{
@@ -220,6 +220,60 @@ async function openCourseParticipantPlanner(courseId){
    finally{saving=false;unlock()}
   };
  }catch(err){if(dialog.isConnected){dialog.querySelector('#participant-loading').hidden=true;dialog.querySelector('#participant-error').textContent=err.message}}
+}
+async function openCourseAttendance(courseId){
+ if(user.role!=='admin'||workspaceSaving||$('#course-attendance-dialog'))return;
+ const account=user,dialog=document.createElement('dialog');dialog.id='course-attendance-dialog';dialog.setAttribute('aria-labelledby','attendance-title');
+ dialog.innerHTML='<form id="course-attendance-form"><div class="dialog-head"><h2 id="attendance-title">حضور واقعی و تسهیم هزینه دوره مشترک</h2><button type="button" class="quiet" data-attendance-close>✕</button></div><p id="attendance-course" class="help"></p><p class="help">ابتدا افراد را در «برنامه‌ریزی افراد» به دوره اضافه کنید؛ سپس فقط کسانی را که واقعاً در دوره حاضر بوده‌اند علامت بزنید. سهم هر شرکت از هزینه کل دوره، به نسبت تعداد افراد حاضر همان شرکت محاسبه می‌شود.</p><p id="attendance-cancelled" class="help" hidden>این دوره لغوشده است؛ افزودن حضور جدید ممکن نیست. حضور ثبت‌شده قبلی و هزینه آن محفوظ است و می‌توان حضور اشتباه را حذف کرد.</p><p id="attendance-loading" class="help" role="status">در حال دریافت حضور و هزینه دوره…</p><div id="attendance-controls" hidden><div class="toolbar"><label>جستجوی نام، کد یا شرکت<input id="attendance-search" placeholder="جستجو در افراد برنامه‌ریزی‌شده"></label><label>فیلتر شرکت<select id="attendance-company"><option value="">همه شرکت‌ها</option></select></label></div><p id="attendance-selected" class="help" role="status"></p><div id="attendance-table"></div><div class="toolbar"><button type="submit" id="save-course-attendance" disabled>ذخیره حضور و محاسبه سهم شرکت‌ها</button><button type="button" class="quiet" data-attendance-close>بستن</button></div><p id="attendance-pending" class="help" role="status"></p><section id="course-cost-report" aria-labelledby="cost-allocation-title"><h3 id="cost-allocation-title">سهم هزینه شرکت‌ها بر اساس حضور ثبت‌شده</h3><div id="cost-allocation-summary"></div><div id="cost-allocation-table"></div><p class="help">مبلغ قطعی هر سهم به ریال نمایش داده می‌شود؛ اختلاف گردکردن تا یک ریال میان شرکت‌ها توزیع می‌شود تا جمع سهم‌ها دقیقاً برابر هزینه کل باشد.</p></section></div><p id="attendance-error" class="error" role="alert"></p><button type="button" id="retry-cost-allocation" class="quiet" hidden>دریافت مجدد گزارش هزینه</button></form>';
+ document.body.append(dialog);dialog.showModal();let saving=false,selected=new Set(),saved=new Set(),people=[],query='',companyFilter='',offset=0;
+ const isCurrent=()=>dialog.isConnected&&user===account&&page==='courses',error=dialog.querySelector('#attendance-error'),save=dialog.querySelector('#save-course-attendance'),report=dialog.querySelector('#course-cost-report'),retry=dialog.querySelector('#retry-cost-allocation');
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.addEventListener('cancel',e=>{if(saving)e.preventDefault()});
+ dialog.querySelectorAll('[data-attendance-close]').forEach(button=>button.onclick=()=>{if(!saving)dialog.close()});
+ const dirty=()=>selected.size!==saved.size||[...selected].some(id=>!saved.has(id));
+ function drawPending(){
+  save.disabled=saving||!dirty();
+  dialog.querySelector('#attendance-pending').textContent=dirty()?'تغییرات حضور هنوز ذخیره نشده است؛ گزارش زیر سهم شرکت‌ها را بر اساس آخرین حضور ذخیره‌شده نشان می‌دهد.':'گزارش هزینه بر اساس آخرین حضور ذخیره‌شده است.';
+  report.classList.toggle('cost-report-pending',dirty());
+ }
+ function drawPeople(){
+  const filtered=people.filter(person=>(!companyFilter||String(person.company_id)===companyFilter)&&[person.name,person.code,person.job,person.department,person.company_name].some(value=>searchMatch(value,query)));
+  dialog.querySelector('#attendance-selected').textContent=`${selected.size.toLocaleString('fa-IR')} نفر حاضر از ${people.length.toLocaleString('fa-IR')} نفر برنامه‌ریزی‌شده؛ انتخاب‌ها با تغییر جستجو و فیلتر حفظ می‌شوند.`;
+  const table=dialog.querySelector('#attendance-table'),cancelled=dialog.querySelector('#attendance-cancelled').hidden===false;
+  table.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr><th>حاضر در دوره</th><th>نام و نام خانوادگی</th><th>کد پرسنلی</th><th>شرکت</th><th>سمت شغلی</th></tr></thead><tbody>${filtered.slice(offset,offset+25).map(person=>`<tr><td><input type="checkbox" data-attendee="${esc(person.id)}" aria-label="حضور ${esc(person.name)} از ${esc(person.company_name)}" ${selected.has(person.id)?'checked':''} ${cancelled&&!person.attended?'disabled':''}></td><td>${esc(person.name)}</td><td>${esc(person.code)}</td><td>${esc(person.company_name)}</td><td>${esc(person.job)}</td></tr>`).join('')}</tbody></table></div>${pager(offset,25,filtered.length)}`:`<div class="empty">${people.length?'فردی با این جستجو یا فیلتر پیدا نشد.':'هنوز فردی برای این دوره برنامه‌ریزی نشده است. ابتدا افراد را در «برنامه‌ریزی افراد» انتخاب کنید.'}</div>`;
+  bindPager(table,()=>{offset-=25;drawPeople()},()=>{offset+=25;drawPeople()});drawPending();
+ }
+ function drawAllocation(data){
+  const count=value=>Number(value).toLocaleString('fa-IR'),money=value=>Number(value).toLocaleString('fa-IR',{maximumFractionDigits:0}),million=value=>Number(value).toLocaleString('fa-IR',{maximumFractionDigits:6});
+  dialog.querySelector('#cost-allocation-summary').innerHTML=`<div class="cost-allocation-totals"><p>هزینه کل دوره<br><strong>${esc(money(data.total_cost_rials))} ریال</strong><small>${esc(million(data.total_cost_million_rials))} میلیون ریال</small></p><p>حضور ثبت‌شده<br><strong>${esc(count(data.attendee_count))} نفر</strong><small>از ${esc(count(data.planned_count))} نفر برنامه‌ریزی‌شده</small></p><p>هزینه تخصیص‌نیافته<br><strong>${esc(money(data.unallocated_cost_rials))} ریال</strong></p></div>${data.attendee_count===0?'<p class="cost-unallocated" role="status">هنوز حضور واقعی ثبت نشده است؛ سهم شرکت‌ها صفر است و کل هزینه تخصیص‌نیافته باقی می‌ماند.</p>':''}`;
+  dialog.querySelector('#cost-allocation-table').innerHTML=data.companies.length?`<div class="table-wrap"><table><thead><tr><th>شرکت</th><th>برنامه‌ریزی‌شده</th><th>حاضر</th><th>سهم هزینه (ریال)</th><th>سهم هزینه (میلیون ریال)</th></tr></thead><tbody>${data.companies.map(company=>`<tr data-allocation-company="${esc(company.company_id)}"><td>${esc(company.company_name)}</td><td>${esc(count(company.planned_count))}</td><td data-actual-count>${esc(count(company.attendee_count))}</td><td data-cost-rials>${esc(money(company.cost_rials))}</td><td>${esc(million(company.cost_million_rials))}</td></tr>`).join('')}</tbody><tfoot><tr><th>جمع سهم شرکت‌ها</th><td>${esc(count(data.planned_count))}</td><td>${esc(count(data.attendee_count))}</td><td data-allocated-total>${esc(money(data.allocated_cost_rials))}</td><td></td></tr></tfoot></table></div>`:'<p class="help">پس از برنامه‌ریزی افراد، شرکت‌های مربوط در این گزارش نمایش داده می‌شوند.</p>';
+  report.hidden=false;retry.hidden=true;
+ }
+ async function loadAllocation(){
+  try{const data=await api('courses/'+courseId+'/cost-allocation');if(isCurrent()){drawAllocation(data);error.textContent=''}}
+  catch(err){if(isCurrent()&&err.name!=='AbortError'){report.hidden=true;retry.hidden=false;error.textContent='دریافت گزارش هزینه انجام نشد. '+err.message}}
+ }
+ retry.onclick=()=>loadAllocation();
+ try{
+  const [roster,allocation]=await Promise.all([api('courses/'+courseId+'/attendance'),api('courses/'+courseId+'/cost-allocation')]);
+  if(!isCurrent())return;people=roster.participants;selected=new Set(people.filter(person=>person.attended).map(person=>person.id));saved=new Set(selected);
+  dialog.querySelector('#attendance-course').textContent=roster.course.title+' · '+roster.course.date+' · '+display('status',roster.course.status);
+  dialog.querySelector('#attendance-cancelled').hidden=roster.course.status!=='cancelled';
+  const companies=[...new Map(people.map(person=>[person.company_id,person.company_name])).entries()];
+  dialog.querySelector('#attendance-company').innerHTML='<option value="">همه شرکت‌ها</option>'+companies.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
+  dialog.querySelector('#attendance-loading').hidden=true;dialog.querySelector('#attendance-controls').hidden=false;drawPeople();drawAllocation(allocation);
+  dialog.querySelector('#attendance-search').oninput=e=>{query=e.target.value;offset=0;drawPeople()};
+  dialog.querySelector('#attendance-company').onchange=e=>{companyFilter=e.target.value;offset=0;drawPeople()};
+  dialog.querySelector('#attendance-table').onchange=e=>{if(e.target.matches('[data-attendee]')){const id=Number(e.target.dataset.attendee);if(e.target.checked)selected.add(id);else selected.delete(id);drawPeople()}};
+  dialog.querySelector('form').onsubmit=async e=>{
+   e.preventDefault();if(saving||!isCurrent()||!dirty())return;saving=true;const unlock=workspaceWriteLock(dialog);error.textContent='';
+   try{
+    const result=await api('courses/'+courseId+'/attendance',{method:'PUT',body:{employee_ids:[...selected]}});
+    if(!isCurrent())return;people=result.participants;selected=new Set(people.filter(person=>person.attended).map(person=>person.id));saved=new Set(selected);
+    notice('حضور واقعی ذخیره شد؛ سهم هزینه شرکت‌ها به‌روزرسانی می‌شود.');await loadAllocation();
+   }catch(err){if(isCurrent()&&err.name!=='AbortError')error.textContent=err.message}
+   finally{saving=false;unlock();if(isCurrent())drawPeople()}
+  };
+ }catch(err){if(isCurrent()&&err.name!=='AbortError'){dialog.querySelector('#attendance-loading').hidden=true;error.textContent=err.message}}
 }
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 function openForm(row={}){if(!user||user.role==='viewer'||$('#entry').dataset.busy)return;entryContext={page,cid:Number(cid),account:user};userReset=null;editId=row.id||null;$('#form-title').textContent=(editId?'ویرایش ':'ثبت ')+menus.find(m=>m[0]===page)[2];$('#form-error').textContent='';$('#fields').innerHTML=defs[page].map(k=>{let choices=null;if(k==='skill_id')choices=cache.skills.map(r=>[r.id,r.title]);if(k==='employee_id')choices=cache.employees.map(r=>[r.id,r.name+' · '+r.code]);if(k==='course_id')choices=cache.courses.map(r=>[r.id,r.title]);if(k==='company_id')choices=user.companies.map(r=>[r.id,r.name]);if(k==='role')choices=[['manager','مسئول آموزش'],['viewer','مشاهده‌گر']];if(k==='calendar_scope')choices=user.role==='admin'?[['holding','تجمیعی هلدینگ'],['internal','داخلی شرکت (موارد خاص)']]:[['internal','داخلی شرکت']];if(k==='status')choices=[['planned','برنامه‌ریزی‌شده'],['approved','مصوب'],['completed','برگزارشده'],['cancelled','لغوشده']];if(k==='level')choices=[[0,'۰ · ارزیابی‌نشده'],[1,'I · آشنایی'],[2,'L · یادگیری'],[3,'U · کاربرد'],[4,'O · تسلط']];let type=k==='password'?'password':['importance','hours','cost','score','reaction','behavior','result'].includes(k)?'number':'text';const optional=['department','job','category','instructor','score','reaction','behavior','result'];let min={importance:1,hours:0.01,cost:0,score:0,reaction:1,behavior:1,result:0}[k],max={importance:3,score:100,reaction:5,behavior:5,result:100}[k];return `<label>${labels[k]}${choices?`<select name="${k}" required ${k==='calendar_scope'&&user.role!=='admin'?'disabled':''}>${choices.map(c=>`<option value="${esc(c[0])}" ${String(row[k])===String(c[0])?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`:`<input name="${k}" type="${type}" value="${esc(row[k]??(k==='importance'?1:k==='cost'?0:k==='year'?currentJalaliYear():k==='date'&&page==='courses'?currentJalaliDate():''))}" ${optional.includes(k)?'':'required'} ${k==='password'?'minlength="12"':''} ${type==='number'?'step="any"':''} ${min!==undefined?`min="${min}"`:''} ${max!==undefined?`max="${max}"`:''}>`}</label>`}).join('');$('#dialog').showModal()}

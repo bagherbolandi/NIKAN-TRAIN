@@ -2,6 +2,8 @@
 import io
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 import sqlite3
 from urllib.parse import quote
@@ -13,7 +15,7 @@ from PIL import Image
 import pytest
 
 from app import create_app
-from app.commitments import COMMITMENT_KEYS, PROFILE_FIELDS, TITLE
+from app.commitments import COMMITMENT_KEYS, PROFILE_FIELDS, TITLE, ANNEX_LIMITS, SUMMARY_NOTE, summary_excerpt
 
 
 NS = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -88,7 +90,7 @@ def body_text(xml):
     return '\n'.join(node.text or '' for node in xml.findall('.//w:t', NS))
 
 
-def test_compact_commitment_keeps_selected_full_text_in_a_real_word_package(ready):
+def test_compact_commitment_keeps_selected_short_values_in_a_real_word_package(ready):
     c, eid = ready['client'], ready['people'][0]
     response = c.get(f'/api/passports/{eid}/commitment.docx?company_id=1')
     xml = word_xml(response)
@@ -116,7 +118,7 @@ def test_compact_commitment_keeps_selected_full_text_in_a_real_word_package(read
     assert xml.findall('.//w:bCs[@w:val="1"]', NS)
     assert xml.findall('.//w:cantSplit', NS)
     assert not xml.findall('.//w:br[@w:type="page"]', NS)
-    headings=[node.text for node in xml.findall('.//w:body/w:p/w:r/w:t', NS)
+    headings=[node.text for node in xml.findall('.//w:t', NS)
               if node.text and re.match(r'^[۰-۹]+\. ', node.text)]
     labels=dict(PROFILE_FIELDS)
     assert headings==[str(index).translate(str.maketrans('0123456789','۰۱۲۳۴۵۶۷۸۹'))+'. '+labels[key]
@@ -239,17 +241,77 @@ def test_holding_logo_is_embedded_or_falls_back_without_export_failure(ready, va
             assert 'NIKAN' in header
 
 
-def test_long_personal_document_is_not_summarized_or_truncated_and_bad_xml_chars_are_safe(ready):
+def test_long_source_and_full_profile_stay_literal_while_annex_is_an_explicit_excerpt(ready):
     eid, c = ready['people'][0], ready['client']
     value = '\n'.join(f'خط کامل وظایف شماره {number}؛ حفظ همه جزئیات سازمانی و شغلی.' for number in range(110))
     value += '\n  فاصله آغازین و متن پایانی حفظ شود  \n'
     assert c.put(f'/api/passports/{eid}/document?company_id=1', headers=ready['headers'],
                  json={'overrides': {'duties': value, 'commitments': 'متن معتبر\x00\x01پایان'}}).status_code == 200
-    for suffix in ('profile.docx', 'commitment.docx'):
-        response = c.get(f'/api/passports/{eid}/{suffix}?company_id=1')
-        word_xml(response)
-        document = Document(io.BytesIO(response.data))
-        paragraphs = [paragraph.text for paragraph in document.paragraphs]
-        assert value in paragraphs
-        assert 'متن معتبرپایان' in paragraphs
+    full = c.get(f'/api/passports/{eid}/profile.docx?company_id=1')
+    word_xml(full)
+    paragraphs = [paragraph.text for paragraph in Document(io.BytesIO(full.data)).paragraphs]
+    assert value in paragraphs and 'متن معتبرپایان' in paragraphs
+    summary = body_text(word_xml(c.get(f'/api/passports/{eid}/commitment.docx?company_id=1')))
+    excerpt = summary_excerpt(value, ANNEX_LIMITS['duties'], conservative=True)
+    assert excerpt in summary and excerpt.endswith('…')
+    assert 'متن پایانی حفظ شود' not in summary and SUMMARY_NOTE in summary
+    assert value not in summary and 'متن معتبرپایان' in summary
+    preview = c.get(f'/api/passports/{eid}/commitment?company_id=1').get_data(as_text=True)
+    assert excerpt in preview and SUMMARY_NOTE in preview
     assert c.get(f'/api/passports/{eid}/document?company_id=1').json['effective']['duties'] == value
+
+
+def test_excerpt_folds_only_display_whitespace_and_does_not_invent_text():
+    assert summary_excerpt('  حفظ\nمتن\tاصلی  ', 100) == 'حفظ متن اصلی'
+    assert summary_excerpt('متن کوتاه', 100) == 'متن کوتاه'
+    value = 'انجام امور محوله و ارائه گزارش به مسئول مستقیم ' * 100
+    result = summary_excerpt(value, 90)
+    assert result.endswith('…') and ' '.join(value.split()).startswith(result[:-1])
+    assert len(result) <= 90
+    assert len(summary_excerpt('W' * 1000, 120)) <= 61
+    assert len(summary_excerpt('界' * 1000, 120)) <= 61
+    assert summary_excerpt('', 100) == ''
+
+
+@pytest.mark.parametrize('case', ('long-persian-logo', 'long-wide-fallback', 'long-unbroken-arabic', 'long-unbroken-latin', 'empty-profile'))
+def test_actual_office_renderer_keeps_annex_on_one_a4_page(ready, tmp_path, case):
+    office = shutil.which('soffice') or '/opt/codex/runtimes/codex-primary-runtime/dependencies/bin/override/soffice'
+    if not Path(office).exists():
+        pytest.skip('A real LibreOffice renderer is needed for the one-page layout regression')
+    c, eid = ready['client'], ready['people'][0]
+    if case != 'empty-profile':
+        glyphs = {'long-persian-logo': 'وظیفه جاری فرد در سازمان و پیگیری اجرای امور محوله؛ ',
+                  'long-wide-fallback': 'WW界😀', 'long-unbroken-arabic': 'ض',
+                  'long-unbroken-latin': 'Q'}[case]
+        values = {key: (glyphs * 3000)[:10000] for key in COMMITMENT_KEYS}
+        assert c.put(f'/api/passports/{eid}/document?company_id=1', headers=ready['headers'],
+                     json={'overrides': values}).status_code == 200
+        identity = {key: ('نام بسیار طولانی سازمان و سمت کارکنان ' * 30) for key in ('name', 'job', 'department')}
+        assert c.put(f'/api/data/employees/{eid}?company_id=1', headers=ready['headers'], json=identity).status_code == 200
+        with sqlite3.connect(ready['app'].config['DB']) as connection:
+            connection.execute('UPDATE companies SET name=? WHERE id=1', ('نام کامل و طولانی شرکت وابسته به هلدینگ ' * 30,))
+        if 'logo' in case:
+            image = io.BytesIO()
+            Image.new('RGB', (30, 800), '#193e59').save(image, format='PNG')
+            with sqlite3.connect(ready['app'].config['DB']) as connection:
+                connection.execute('INSERT INTO branding(key,mime,content) VALUES (?,?,?)', ('holding', 'image/png', image.getvalue()))
+    else:
+        assert c.put(f'/api/data/employees/{eid}?company_id=1', headers=ready['headers'],
+                     json={'job': 'بدون الگو'}).status_code == 200
+        assert c.delete(f'/api/passports/{eid}/document?company_id=1', headers=ready['headers']).status_code == 200
+    before = c.get(f'/api/passports/{eid}/document?company_id=1').json
+    path = tmp_path / (case + '.docx')
+    response = c.get(f'/api/passports/{eid}/commitment.docx?company_id=1')
+    word_xml(response)
+    path.write_bytes(response.data)
+    profile = tmp_path / 'office-profile'
+    converted = subprocess.run([office, '-env:UserInstallation=' + profile.as_uri(), '--headless',
+                                '--convert-to', 'pdf', '--outdir', str(tmp_path), str(path)],
+                               capture_output=True, timeout=45)
+    assert converted.returncode == 0, converted.stderr.decode(errors='replace')
+    pdf = path.with_suffix('.pdf').read_bytes()
+    assert len(re.findall(rb'/Type\s*/Page(?!s)\b', pdf)) == 1
+    # A4 dimensions in the emitted PDF, not just the editable document metadata.
+    media = re.search(rb'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]', pdf)
+    assert media and abs(float(media[1]) - 595.3) < 1 and abs(float(media[2]) - 841.9) < 1
+    assert c.get(f'/api/passports/{eid}/document?company_id=1').json == before

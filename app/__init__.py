@@ -145,6 +145,8 @@ def create_app(data_dir=None,testing=False):
    db().execute('UPDATE users SET password=? WHERE id=?',(generate_password_hash(d['password']),uid))
   audit('update_user',target['company_id'],str(uid));db().commit();return jsonify(ok=True)
  def validate_refs(table,d,cid):
+  if table=='employees' and 'code' in d and (not isinstance(d['code'],str) or len(d['code'])>128):
+   raise ValueError('کد پرسنلی باید متن با حداکثر ۱۲۸ نویسه باشد')
   if table=='courses' and 'calendar_scope' in d and d['calendar_scope'] not in ('holding','internal'):
    raise ValueError('نوع تقویم باید هلدینگ یا داخلی شرکت باشد')
   numeric={'level':dict(integer=True,minimum=1 if table=='requirements' else 0,maximum=4),
@@ -208,7 +210,10 @@ def create_app(data_dir=None,testing=False):
   target=db().execute(f'SELECT * FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone()
   if not target:return error('رکورد یافت نشد',404)
   if table=='courses' and g.user['role']!='admin' and target['calendar_scope']=='holding':raise PermissionError()
-  if request.method=='DELETE':db().execute(f'DELETE FROM {table} WHERE id=? AND company_id=?',(rid,cid))
+  if request.method=='DELETE':
+   if table=='courses' and db().execute('SELECT 1 FROM course_participants WHERE course_id=? AND attended=1 LIMIT 1',(rid,)).fetchone():
+    return error('این دوره حضور ثبت‌شده دارد؛ برای حفظ مبنای تسهیم هزینه، ابتدا حضور را صریحاً پاک کنید',409)
+   db().execute(f'DELETE FROM {table} WHERE id=? AND company_id=?',(rid,cid))
   else:
    d={k:v for k,v in json_object().items() if k in FIELDS[table]}
    if not d:raise ValueError('تغییری ارسال نشده')

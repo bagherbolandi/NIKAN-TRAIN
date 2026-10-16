@@ -1,0 +1,150 @@
+{
+  "office": [
+    {
+      "scenario": "long-persian-logo",
+      "pages": 1,
+      "page_points": [
+        595.3,
+        841.89
+      ],
+      "text_characters": 3104,
+      "word_file": "long-persian-logo.docx",
+      "pdf_file": "long-persian-logo.pdf",
+      "renderer": "LibreOfficeDev26.8alpha"
+    },
+    {
+      "scenario": "long-wide-fallback",
+      "pages": 1,
+      "page_points": [
+        595.3,
+        841.89
+      ],
+      "text_characters": 2972,
+      "word_file": "long-wide-fallback.docx",
+      "pdf_file": "long-wide-fallback.pdf",
+      "renderer": "LibreOfficeDev26.8alpha"
+    },
+    {
+      "scenario": "long-unbroken-arabic",
+      "pages": 1,
+      "page_points": [
+        595.3,
+        841.89
+      ],
+      "text_characters": 2971,
+      "word_file": "long-unbroken-arabic.docx",
+      "pdf_file": "long-unbroken-arabic.pdf",
+      "renderer": "LibreOfficeDev26.8alpha"
+    },
+    {
+      "scenario": "long-unbroken-latin",
+      "pages": 1,
+      "page_points": [
+        595.3,
+        841.89
+      ],
+      "text_characters": 2976,
+      "word_file": "long-unbroken-latin.docx",
+      "pdf_file": "long-unbroken-latin.pdf",
+      "renderer": "LibreOfficeDev26.8alpha"
+    },
+    {
+      "scenario": "empty-profile",
+      "pages": 1,
+      "page_points": [
+        595.3,
+        841.89
+      ],
+      "text_characters": 2555,
+      "word_file": "empty-profile.docx",
+      "pdf_file": "empty-profile.pdf",
+      "renderer": "LibreOfficeDev26.8alpha"
+    }
+  ],
+  "browser": [
+    {
+      "scenario": "nikan-commitment-print",
+      "pages": 1,
+      "page_points": [
+        594.96,
+        841.92
+      ],
+      "text_characters": 2234,
+      "renderer": "Chromium",
+      "pdf_file": "nikan-commitment-print.pdf"
+    },
+    {
+      "scenario": "nikan-commitment-long-print",
+      "pages": 1,
+      "page_points": [
+        594.96,
+        841.92
+      ],
+      "text_characters": 2404,
+      "renderer": "Chromium",
+      "pdf_file": "nikan-commitment-long-print.pdf"
+    },
+    {
+      "scenario": "nikan-commitment-latin-print",
+      "pages": 1,
+      "page_points": [
+        594.96,
+        841.92
+      ],
+      "text_characters": 2442,
+      "renderer": "Chromium",
+      "pdf_file": "nikan-commitment-latin-print.pdf"
+    },
+    {
+      "scenario": "nikan-commitment-arabic-print",
+      "pages": 1,
+      "page_points": [
+        594.96,
+        841.92
+      ],
+      "text_characters": 2438,
+      "renderer": "Chromium",
+      "pdf_file": "nikan-commitment-arabic-print.pdf"
+    }
+  ],
+  "cost_browser": {
+    "allocated_cost_rials": 101,
+    "allocation_basis": "actual_attendance",
+    "attendee_count": 3,
+    "companies": [
+      {
+        "attendee_count": 2,
+        "company_id": 1,
+        "company_name": "نور ایستا پلاستیک",
+        "cost_million_rials": 6.7e-05,
+        "cost_rials": 67,
+        "planned_count": 2
+      },
+      {
+        "attendee_count": 1,
+        "company_id": 2,
+        "company_name": "نور ایستا خراسان",
+        "cost_million_rials": 3.4e-05,
+        "cost_rials": 34,
+        "planned_count": 1
+      }
+    ],
+    "course": {
+      "calendar_scope": "holding",
+      "company_id": 2,
+      "cost": 0.000101,
+      "date": "1405/03/25",
+      "id": 2,
+      "status": "completed",
+      "title": "دوره تجمیعی شرکت دوم <img src=x onerror=window.calendarXss=1>"
+    },
+    "currency": "IRR",
+    "maximum_total_cost_rials": 9007199254740991,
+    "planned_count": 3,
+    "rounding": "nearest_rial_largest_remainder_company_id_tiebreak",
+    "source_cost_unit": "million_rials",
+    "total_cost_million_rials": 0.000101,
+    "total_cost_rials": 101,
+    "unallocated_cost_rials": 0
+  }
+}

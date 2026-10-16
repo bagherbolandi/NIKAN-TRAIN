@@ -1,0 +1,29 @@
+{
+  "platform": "Linux Python3.12.14 and Chromium",
+  "native_windows_executed": false,
+  "standalone": {
+    "execution": "Actual extracted desktop/app with standalone-only runtime dependencies",
+    "checks": {
+      "payload": {
+        "passed": true,
+        "output": "Standalone 0.10 features passed: actual attendance distinct from plans, exact whole-rial company allocation, readonly reporting and attendance recovery, branded Excel templates, atomic preview/import and repeat safety, matching full job/person fields, short personal references, independent actual snapshots, readonly full/commitment Word exports, company/role/calendar protection and SQLite backup recovery.\nPayload validation passed: linux 3.12.14\nPackaged desktop: browser handoff survival, server readiness and clean shutdown passed."
+      },
+      "calendar": {
+        "passed": true,
+        "output": "Calendar browser passed: holding/internal views, safe text, company-owned mutations, planned/actual attendance with retained filters and locked writes, zero-attendee allocation, exact 67/34 rial cost shares, desktop/mobile cost report, attended-roster protection, admin-only consolidated access, company internal creation, viewer read-only, escaped API errors and retry.\nPASS: calendar browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "commitment": {
+        "passed": true,
+        "output": "Commitment browser passed: identical complete18field forms/Word layouts, separate oneA4page8section excerpt including10000characterfields, independent actual snapshot including blank, short reference, branded DOCX and escaped HTML preview, print button and A4PDF, desktop/mobile, export read-only and company/viewer scope.\nPASS: commitment browser workflow on extracted standalone desktop with standalone-only dependencies"
+      }
+    }
+  },
+  "network": {
+    "platform": "linux",
+    "scope": "Extracted application using Linux development Python and verified HTTPS; Windows installer execution not tested.",
+    "validator_exit_code": 0,
+    "stop_command_exit_code": 0,
+    "server_exit_code": 0
+  },
+  "network_output": "Network 0.10 payload passed: separate planned/actual attendance, exact whole-rial company allocation, protected readonly reporting and encrypted attendance recovery, verified HTTPS, 16 concurrent writes, Excel multipart preview/import/repeat safety, short personal references and actual snapshots, readonly full/commitment Word exports, protected company/calendar/bank scopes, encrypted backup and full recovery, active-server protection."
+}

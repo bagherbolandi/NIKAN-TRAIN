@@ -262,7 +262,7 @@ dialog::backdrop { background: #0c203894; }
 .dialog-head > button { flex: 0 0 auto; min-width: 36px; min-height: 36px; padding: 4px 10px; }
 #fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 #fields .wide, .pro-form .wide { grid-column: 1 / -1; }
-#form-error:not(:empty), [data-error]:not(:empty), #participant-error:not(:empty) { padding: 10px 13px; border: 1px solid #efc8ce; border-radius: 8px; background: #fff3f5; }
+#form-error:not(:empty), [data-error]:not(:empty), #participant-error:not(:empty), #attendance-error:not(:empty) { padding: 10px 13px; border: 1px solid #efc8ce; border-radius: 8px; background: #fff3f5; }
 .import-box { max-width: 720px; }
 .import-box form { margin-top: 22px; }
 .import-box label.check { display: flex; align-items: flex-start; gap: 10px; margin: 20px 0; font-weight: normal; line-height: 2; }
@@ -322,16 +322,23 @@ details summary { cursor: pointer; font-weight: bold; }
 .calendar-event button { max-width: 100%; min-height: 34px; margin-top: 9px; padding: 5px 9px; white-space: normal; font-size: 10px; }
 #calendar-grid:empty { display: none; }
 #calendar-state { margin-bottom: 0; }
-#need-people-dialog, #course-participant-dialog { width: 1000px; }
+#need-people-dialog, #course-participant-dialog, #course-attendance-dialog { width: 1000px; }
 #personal-requirements-dialog { width: 960px; }
 #personal-requirements-dialog > [data-search] { width: 100%; margin-bottom: 17px; }
 #personal-requirements-dialog > .toolbar { margin-top: 20px; margin-bottom: 0; }
 #need-people-dialog [data-query] { width: 100%; margin-bottom: 16px; }
-#course-participant-dialog .toolbar { flex-wrap: wrap; }
-#course-participant-dialog .toolbar label { flex: 1 1 220px; }
-#course-participant-dialog .toolbar input { width: 100%; }
-#course-participant-dialog .toolbar select { width: 100%; }
-#participant-selected { padding: 9px 13px; border: 1px solid #d6e4f8; border-radius: 8px; background: #f2f7ff; color: #365d95; }
+#course-participant-dialog .toolbar, #course-attendance-dialog .toolbar { flex-wrap: wrap; }
+#course-participant-dialog .toolbar label, #course-attendance-dialog .toolbar label { flex: 1 1 220px; }
+#course-participant-dialog .toolbar input, #course-attendance-dialog .toolbar input { width: 100%; }
+#course-participant-dialog .toolbar select, #course-attendance-dialog .toolbar select { width: 100%; }
+#participant-selected, #attendance-selected { padding: 9px 13px; border: 1px solid #d6e4f8; border-radius: 8px; background: #f2f7ff; color: #365d95; }
+#course-cost-report { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.cost-allocation-totals { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 15px; }
+.cost-allocation-totals p { flex: 1 1 200px; min-width: 0; margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: #f7f9fc; }
+.cost-allocation-totals strong, .cost-allocation-totals small { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.cost-unallocated, #attendance-pending, #attendance-cancelled { padding: 10px 13px; border: 1px solid #eddbaf; border-radius: 8px; background: #fff9ed; color: #735722; }
+.cost-report-pending { border-inline-start: 3px solid #c7983f; padding-inline-start: 13px; }
+#cost-allocation-table tfoot { background: #f2f7ff; font-weight: bold; }
 
 /* Personnel passports, identity and printable documents. */
 .passport-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 18px; padding: 24px 28px; border-radius: var(--radius); background: linear-gradient(115deg, #254e7a, #193756); color: #fff; }

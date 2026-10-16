@@ -34,6 +34,8 @@ DROP TRIGGER course_external_code_created;
 DROP INDEX courses_external_code;
 ALTER TABLE courses DROP COLUMN external_code;
 ALTER TABLE employees DROP COLUMN passport_legacy_number;
+ALTER TABLE employees DROP COLUMN passport_aliases;
+ALTER TABLE employees DROP COLUMN passport_code_numbered;
 ALTER TABLE personal_documents DROP COLUMN is_snapshot;
 DROP TABLE course_participants;
 DROP TABLE holding_catalog_state;
@@ -82,7 +84,7 @@ def test_recovery_rejects_unsupported_or_destructive_migration(legacy_archive,tm
    if change=='archived_count':conn.execute("INSERT INTO employees(company_id,code,name) VALUES (1,'UNEXPECTED','Unexpected employee')")
    elif change=='unexpected_table':conn.execute('CREATE TABLE unexpected_data(note TEXT)')
    elif change=='unexpected_marker':conn.execute("UPDATE holding_catalog_state SET value='unexpected'")
-   elif change=='nonempty_participants':conn.execute('INSERT INTO course_participants SELECT c.id,e.id FROM courses c CROSS JOIN employees e LIMIT 1')
+   elif change=='nonempty_participants':conn.execute('INSERT INTO course_participants(course_id,employee_id) SELECT c.id,e.id FROM courses c CROSS JOIN employees e LIMIT 1')
    elif change=='unexpected_company_registry':conn.execute('UPDATE company_registry SET high_watermark=999')
    else:conn.execute('DELETE FROM company_registry')
   return migrated_app

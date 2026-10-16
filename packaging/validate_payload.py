@@ -1,5 +1,5 @@
 """Run with the bundled Windows interpreter after installation."""
-import sys,tempfile,threading,urllib.request,json,argparse,io,zipfile
+import sys,tempfile,threading,urllib.request,json,argparse,io,zipfile,sqlite3
 from pathlib import Path
 parser=argparse.ArgumentParser()
 parser.add_argument('--install',type=Path,help='Extracted or installed application directory')
@@ -63,6 +63,35 @@ with tempfile.TemporaryDirectory() as root:
  assert response.status_code==200,response.json
  assert {r['id'] for r in c.get(roster).json['participants']}==set(employees)
  assert c.get('/api/data/records?company_id=1').json==[]
+ # Planned selections do not imply actual presence or a financial share.
+ attendance=f'/api/courses/{courses[0]}/attendance';allocation=f'/api/courses/{courses[0]}/cost-allocation'
+ assert all(not row['attended'] for row in c.get(attendance).json['participants'])
+ assert c.put(f'/api/data/courses/{courses[0]}?company_id=1',headers=h,json={'cost':1.000001}).status_code==200
+ report=c.get(allocation).json
+ assert report['allocation_basis']=='actual_attendance' and report['planned_count']==2 and report['attendee_count']==0
+ assert report['total_cost_rials']==1000001 and report['allocated_cost_rials']==0 and report['unallocated_cost_rials']==1000001
+ extra=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'EXTRA-6789','name':'Extra actual attendee'}).json['id']
+ planned_employees=employees+[extra]
+ assert c.put(roster,headers=h,json={'employee_ids':planned_employees}).status_code==200
+ assert c.put(attendance,headers=h,json={'employee_ids':[employees[0]]}).status_code==200
+ report=c.get(allocation).json
+ assert report['planned_count']==3 and report['attendee_count']==1
+ assert {row['company_id']:row['cost_rials'] for row in report['companies']}=={1:1000001,2:0}
+ assert c.put(attendance,headers=h,json={'employee_ids':planned_employees}).status_code==200
+ report=c.get(allocation).json
+ assert report['attendee_count']==3 and report['allocated_cost_rials']==1000001 and report['unallocated_cost_rials']==0
+ assert {row['company_id']:row['cost_rials'] for row in report['companies']}=={1:666667,2:333334}
+ assert sum(row['cost_rials'] for row in report['companies'])==report['total_cost_rials']
+ # Reporting is read-only; attendance survives an ordinary roster resave.
+ with sqlite3.connect(Path(root)/'nikan.sqlite3') as evidence:
+  before_report=evidence.execute('SELECT count(*) FROM audit').fetchone()[0]
+ assert c.get(allocation).json==report
+ with sqlite3.connect(Path(root)/'nikan.sqlite3') as evidence:
+  assert evidence.execute('SELECT count(*) FROM audit').fetchone()[0]==before_report
+ assert c.put(roster,headers=h,json={'employee_ids':planned_employees}).status_code==200
+ assert c.get(allocation).json==report
+ assert c.put(roster,headers=h,json={'employee_ids':employees}).status_code==400
+ assert c.get(f'/api/courses/{internal}/cost-allocation').status_code==400
  # Exercise the packaged spreadsheet renderer/parser and Word dependencies.
  import openpyxl
  forms=c.get('/api/excel/forms?company_id=1').json
@@ -80,12 +109,14 @@ with tempfile.TemporaryDirectory() as root:
  assert spreadsheet('commit').json['unchanged']==1
  document_path=f'/api/passports/{employees[0]}/document?company_id=1'
  assert c.put(document_path,headers=h,json={'overrides':{'duties':'Actual personal duties for the contract'}}).status_code==200
- document=c.get(document_path).json;assert document['number'].startswith('NP-') and document['is_snapshot']
+ document=c.get(document_path).json;assert document['number']=='NP-01-0001' and document['is_snapshot'] and document['aliases']==[]
  before_export=c.get(document_path).json
  for suffix in ('commitment.docx','profile.docx'):
   response=c.get(f'/api/passports/{employees[0]}/{suffix}?company_id=1');assert response.status_code==200,response.json
   with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
    text=archive.read('word/document.xml').decode();assert 'Actual personal duties for the contract' in text and document['number'] in text
+ assert c.get(document_path).json==before_export
+ assert c.put(f'/api/data/employees/{employees[0]}?company_id=1',headers=h,json={'code':'P-9876'}).status_code==200
  assert c.get(document_path).json==before_export
  assert c.get(f'/api/passports/{employees[0]}/commitment?company_id=1').status_code==200
  assert c.delete('/api/competency-bank/PAYLOAD-SHARED',headers=h).status_code==409
@@ -125,6 +156,8 @@ with tempfile.TemporaryDirectory() as root:
    assert scoped.put(f'/api/data/courses/{own_id}?company_id=2',headers=sh,json={'calendar_scope':'holding'}).status_code==403
   assert scoped.get('/api/holding/personnel').status_code==403
   assert scoped.get(roster).status_code==403
+  assert scoped.get(attendance).status_code==403 and scoped.get(allocation).status_code==403
+  assert scoped.put(attendance,headers=sh,json={'employee_ids':[]}).status_code==403
   assert scoped.put(roster,headers=sh,json={'employee_ids':[]}).status_code==403
   assert scoped.post('/api/competency-bank',headers=sh,json={'code':'BYPASS','title':'Forbidden'}).status_code==403
   assert scoped.put('/api/competency-bank/PAYLOAD-SHARED',headers=sh,json={'title':'Forbidden'}).status_code==403
@@ -138,12 +171,15 @@ with tempfile.TemporaryDirectory() as root:
  (restored_dir/'nikan.sqlite3').write_bytes(snapshot.data)
  restored=create_app(restored_dir,True).test_client()
  assert restored.post('/api/login',json={'username':'validation-admin','password':'Test-only-password-123'}).status_code==200
- assert {r['id'] for r in restored.get(roster).json['participants']}==set(employees)
+ assert {r['id'] for r in restored.get(roster).json['participants']}==set(planned_employees)
+ assert all(r['attended'] for r in restored.get(attendance).json['participants'])
+ assert restored.get(allocation).json==report
+ assert restored.get(document_path).json==before_export
  assert restored.get('/api/companies').json==original_companies
  import sqlite3
  with sqlite3.connect(restored_dir/'nikan.sqlite3') as restored_db:
   assert restored_db.execute('SELECT count(*) FROM company_registry').fetchone()[0]==1
- print('Standalone 0.9 features passed: branded Excel templates, atomic preview/import and repeat safety, matching full job/person fields, short personal references, independent actual snapshots, readonly full/commitment Word exports, company/role/calendar protection and SQLite backup recovery.')
+ print('Standalone 0.10 features passed: actual attendance distinct from plans, exact whole-rial company allocation, readonly reporting and attendance recovery, branded Excel templates, atomic preview/import and repeat safety, matching full job/person fields, short personal references, independent actual snapshots, readonly full/commitment Word exports, company/role/calendar protection and SQLite backup recovery.')
  server=create_server(app,host='127.0.0.1',port=0);thread=threading.Thread(target=server.run,daemon=True);thread.start()
  try:
   with urllib.request.urlopen(f'http://127.0.0.1:{server.effective_port}/api/status') as response:assert response.status==200

@@ -2,6 +2,7 @@ import io
 import json
 import sqlite3
 import openpyxl
+import pytest
 from app import create_app
 from app.documents import FIELDS,save_personal_document
 from test_catalog import ready
@@ -52,18 +53,19 @@ def test_short_personal_reference_is_stable_and_deleted_identity_is_not_reissued
  employee=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SHORT-1','name':'First person'}).json['id']
  path=f'/api/passports/{employee}/document?company_id=1'
  document=c.get(path).json
- assert document['number']=='NP-01-000001'
+ assert document['number']=='NP-01-0001'
  assert document['legacy_number']==''
  assert c.put(f'/api/data/employees/{employee}?company_id=1',headers=h,json={'job':'New role'}).status_code==200
+ assert c.put(f'/api/data/employees/{employee}?company_id=1',headers=h,json={'code':'SHORT-7654'}).status_code==200
  assert c.put('/api/companies/1',headers=h,json={'name':'Renamed company'}).status_code==200
  assert c.get(path).json['number']==document['number']
  assert c.delete(f'/api/data/employees/{employee}?company_id=1',headers=h).status_code==200
- replacement=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SHORT-2','name':'Different person'}).json['id']
+ replacement=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SHORT-1','name':'Different person'}).json['id']
  assert replacement==employee  # SQLite may reuse the primary key; the contract reference cannot.
- assert c.get(f'/api/passports/{replacement}/document?company_id=1').json['number']=='NP-01-000002'
+ assert c.get(f'/api/passports/{replacement}/document?company_id=1').json['number']=='NP-01-0001-2'
  with sqlite3.connect(app.config['DB']) as connection:
   before=connection.execute('SELECT passport_high_watermark FROM company_registry').fetchone()[0]
- assert c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SHORT-2','name':'Duplicate'}).status_code==400
+ assert c.post('/api/data/employees?company_id=1',headers=h,json={'code':'SHORT-1','name':'Duplicate'}).status_code==400
  with sqlite3.connect(app.config['DB']) as connection:
   assert connection.execute('SELECT passport_high_watermark FROM company_registry').fetchone()[0]==before
 
@@ -80,7 +82,7 @@ def test_legacy_reference_migration_alias_collision_custom_values_and_backup(tmp
   ''')
   connection.executemany('INSERT INTO employees(id,company_id,code,name,passport_number) VALUES (?,?,?,?,?)',[
    (1,1,'OLD1','Old first person',old_reference),
-   (2,1,'CUSTOM-NP','Custom short reference','NP-01-000001'),
+   (2,1,'CUSTOM-NP','Custom short reference','NP-01-0001'),
    (3,1,'CUSTOM','Custom contract reference','CONTRACT-REFERENCE-77'),
    (4,2,'OLD2','Old second person',other_reference),
   ])
@@ -89,7 +91,7 @@ def test_legacy_reference_migration_alias_collision_custom_values_and_backup(tmp
  assert c.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
  h={'X-CSRF-Token':c.get('/api/me').json['csrf']}
  references={row['id']:(row['passport_number'],row['passport_legacy_number']) for cid in (1,2) for row in c.get(f'/api/data/employees?company_id={cid}').json}
- assert references=={1:('NP-01-000005',old_reference),2:('NP-01-000001',''),3:('CONTRACT-REFERENCE-77',''),4:('NP-02-000004',other_reference)}
+ assert references=={1:('NP-01-0001-2',old_reference),2:('NP-01-0001',''),3:('CONTRACT-REFERENCE-77',''),4:('NP-02-0002',other_reference)}
  assert c.get('/api/passports/1/document?company_id=1').json['legacy_number']==old_reference
  backup=c.post('/api/backup',headers=h)
  restored=tmp_path/'restored';restored.mkdir();(restored/'nikan.sqlite3').write_bytes(backup.data)
@@ -98,28 +100,128 @@ def test_legacy_reference_migration_alias_collision_custom_values_and_backup(tmp
   assert current.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
   after={row['id']:(row['passport_number'],row['passport_legacy_number']) for cid in (1,2) for row in current.get(f'/api/data/employees?company_id={cid}').json}
   assert after==references
-  assert current.get('/api/passports/1/document?company_id=1').json['number']=='NP-01-000005'
+  assert current.get('/api/passports/1/document?company_id=1').json['number']=='NP-01-0001-2'
   assert current.get('/api/passports/1/document?company_id=1').json['legacy_number']==old_reference
 
 
-def test_existing_custom_aliases_advance_counter_and_explicit_numbers_are_preserved(ready):
+def test_existing_custom_aliases_reserve_matching_code_tails_and_explicit_numbers_are_preserved(ready):
  app,c,h=ready
  with sqlite3.connect(app.config['DB']) as connection:
-  connection.execute("INSERT INTO employees(company_id,code,name,passport_number,passport_legacy_number) VALUES (1,'CUSTOM','Custom person','NP-01-000800','NP-02-000850')")
+  connection.execute("INSERT INTO employees(company_id,code,name,passport_number,passport_legacy_number) VALUES (1,'CUSTOM','Custom person','NP-01-0800','NP-02-0850')")
   row=connection.execute("SELECT passport_number,passport_legacy_number FROM employees WHERE code='CUSTOM'").fetchone()
-  assert row==('NP-01-000800','NP-02-000850')
- employee=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'NEXT','name':'Next person'}).json['id']
- assert c.get(f'/api/passports/{employee}/document?company_id=1').json['number']=='NP-01-000851'
+  assert row==('NP-01-0800','NP-02-0850')
+ employee=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'NEXT0800','name':'Next person'}).json['id']
+ assert c.get(f'/api/passports/{employee}/document?company_id=1').json['number']=='NP-01-0800-2'
  with sqlite3.connect(app.config['DB']) as connection:
-  connection.execute("UPDATE employees SET passport_legacy_number='NP-01-000900' WHERE code='CUSTOM'")
- later=c.post('/api/data/employees?company_id=2',headers=h,json={'code':'LATER','name':'Later person'}).json['id']
- assert c.get(f'/api/passports/{later}/document?company_id=2').json['number']=='NP-02-000901'
+  connection.execute("UPDATE employees SET passport_legacy_number='NP-02-0900' WHERE code='CUSTOM'")
+ later=c.post('/api/data/employees?company_id=2',headers=h,json={'code':'LATER0900','name':'Later person'}).json['id']
+ assert c.get(f'/api/passports/{later}/document?company_id=2').json['number']=='NP-02-0900-2'
+ other=c.post('/api/data/employees?company_id=2',headers=h,json={'code':'LATER0850','name':'Legacy alias collision'}).json['id']
+ assert c.get(f'/api/passports/{other}/document?company_id=2').json['number']=='NP-02-0850-2'
+
+
+@pytest.mark.parametrize(('code','tail'),[
+ ('123456','3456'),('۰۰۱۲۳۴۵۶','3456'),('رقم-٠٠١٢٣٤٥٦','3456'),
+ ('A۱۲b٣٤-5٦X7','4567'),('7','0007'),('۰۰','0000'),('STAFF','0000'),
+ ('prefix-1234-tail','1234'),('１２３４','0000'),('X'*124+'۱۲۳۴','1234'),
+])
+def test_reference_uses_normalized_last_four_decimal_personnel_code_digits(ready,code,tail):
+ _,client,headers=ready
+ employee=client.post('/api/data/employees?company_id=1',headers=headers,json={'code':code,'name':'Personnel code test'})
+ assert employee.status_code==201,employee.json
+ document=client.get(f"/api/passports/{employee.json['id']}/document?company_id=1").json
+ assert document['number']==f'NP-01-{tail}'
+ assert document['aliases']==[]
+
+
+def test_duplicate_code_tails_are_separate_by_company_and_never_reused_on_restart(ready,tmp_path):
+ _,client,headers=ready
+ def add(code,cid=1):
+  result=client.post(f'/api/data/employees?company_id={cid}',headers=headers,json={'code':code,'name':code})
+  assert result.status_code==201,result.json
+  eid=result.json['id']
+  return eid,client.get(f'/api/passports/{eid}/document?company_id={cid}').json['number']
+ first,reference=add('1001234')
+ assert reference=='NP-01-1234'
+ second,reference=add('2001234')
+ assert reference=='NP-01-1234-2'
+ assert add('1001234',2)[1]=='NP-02-1234'
+ assert client.delete(f'/api/data/employees/{first}?company_id=1',headers=headers).status_code==200
+ assert client.delete(f'/api/data/employees/{second}?company_id=1',headers=headers).status_code==200
+ current=create_app(tmp_path,True).test_client()
+ assert current.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
+ headers={'X-CSRF-Token':current.get('/api/me').json['csrf']}
+ employee=current.post('/api/data/employees?company_id=1',headers=headers,json={'code':'3001234','name':'Third identity'}).json['id']
+ assert current.get(f'/api/passports/{employee}/document?company_id=1').json['number']=='NP-01-1234-3'
+
+
+def test_v09_reference_upgrade_preserves_both_previous_references_and_full_actual_document(ready,tmp_path):
+ app,client,headers=ready
+ employee=client.post('/api/data/employees?company_id=1',headers=headers,json={'code':'۱۲۳۴۵۶','name':'Existing contract holder','job':'Engineer'}).json['id']
+ path=f'/api/passports/{employee}/document?company_id=1'
+ assert client.put(path,headers=headers,json={'overrides':{field:f'Unmodified {field}' for field in FIELDS}}).status_code==200
+ previous='NP-01-000042';original='NT-P-'+'D'*24
+ with sqlite3.connect(app.config['DB']) as connection:
+  # Model the actual v0.9 schema, which had only one legacy-alias column.
+  connection.executescript('''DROP TRIGGER employee_passport_created;
+DROP TRIGGER employee_passport_updated;
+ALTER TABLE employees DROP COLUMN passport_aliases;
+ALTER TABLE employees DROP COLUMN passport_code_numbered;
+ALTER TABLE company_registry DROP COLUMN passport_code_counters;''')
+  connection.execute('UPDATE employees SET passport_number=?,passport_legacy_number=? WHERE id=?',(previous,original,employee))
+  saved=connection.execute('SELECT * FROM personal_documents WHERE employee_id=?',(employee,)).fetchone()
+ for _ in range(2):
+  current=create_app(tmp_path,True).test_client()
+  assert current.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
+  document=current.get(path).json
+  assert document['number']=='NP-01-3456'
+  assert document['legacy_number']==original
+  assert set(document['aliases'])=={original,previous}
+  assert document['overrides']=={field:f'Unmodified {field}' for field in FIELDS}
+  with sqlite3.connect(app.config['DB']) as connection:
+   assert connection.execute('SELECT * FROM personal_documents WHERE employee_id=?',(employee,)).fetchone()==saved
+ # All aliases survive a normal database-backup round trip too.
+ response=current.post('/api/backup',headers={'X-CSRF-Token':current.get('/api/me').json['csrf']})
+ restored=tmp_path/'v09-upgraded-restored';restored.mkdir();(restored/'nikan.sqlite3').write_bytes(response.data)
+ restored_client=create_app(restored,True).test_client()
+ assert restored_client.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
+ restored_document=restored_client.get(path).json
+ assert restored_document['number']=='NP-01-3456'
+ assert set(restored_document['aliases'])=={original,previous}
+ assert restored_document['overrides']==document['overrides']
+
+
+def test_excel_personnel_import_shares_numbering_and_preview_does_not_consume_suffix(ready):
+ app,client,headers=ready
+ from test_excel_forms import submit
+ rows=[{'code':'۱۲۳۴۵۶','name':'First imported identity'},{'code':'٩٩٣٤٥٦','name':'Second imported identity'}]
+ def state():
+  with sqlite3.connect(app.config['DB']) as connection:
+   return (connection.execute('SELECT * FROM employees').fetchall(),connection.execute('SELECT * FROM company_registry').fetchall())
+ before=state()
+ preview=submit(client,headers,'employees',rows)
+ assert preview.status_code==200 and preview.json['can_commit']
+ assert state()==before
+ committed=submit(client,headers,'employees',rows,mode='commit')
+ assert committed.status_code==200 and committed.json['created']==2,committed.json
+ employees=client.get('/api/data/employees?company_id=1').json
+ assert {row['code']:row['passport_number'] for row in employees}=={'۱۲۳۴۵۶':'NP-01-3456','٩٩٣٤٥٦':'NP-01-3456-2'}
+ after=state()
+ repeated=submit(client,headers,'employees',rows,mode='commit')
+ assert repeated.status_code==200 and repeated.json['unchanged']==2
+ assert state()==after
+ # A later invalid row rolls back both the earlier insertion and its reservation.
+ rejected=submit(client,headers,'employees',[{'code':'203456','name':'Third identity'},{'code':'123','name':'Invalid job reference','job':'No such job'}],mode='commit')
+ assert rejected.status_code==400
+ assert state()==after
+ third=client.post('/api/data/employees?company_id=1',headers=headers,json={'code':'303456','name':'Actual third identity'}).json['id']
+ assert client.get(f'/api/passports/{third}/document?company_id=1').json['number']=='NP-01-3456-3'
 
 
 def test_old_client_legacy_insert_after_deletion_cannot_reuse_retired_short_reference(ready, tmp_path):
  app,c,h=ready
  employee=c.post('/api/data/employees?company_id=1',headers=h,json={'code':'FIRST','name':'First person'}).json['id']
- assert c.get(f'/api/passports/{employee}/document?company_id=1').json['number']=='NP-01-000001'
+ assert c.get(f'/api/passports/{employee}/document?company_id=1').json['number']=='NP-01-0000'
  assert c.delete(f'/api/data/employees/{employee}?company_id=1',headers=h).status_code==200
  legacy='NT-P-'+'C'*24
  with sqlite3.connect(app.config['DB']) as connection:
@@ -128,8 +230,9 @@ def test_old_client_legacy_insert_after_deletion_cannot_reuse_retired_short_refe
  current=create_app(tmp_path,True).test_client()
  assert current.post('/api/login',json={'username':'admin','password':'Secure-password-123'}).status_code==200
  document=current.get(f'/api/passports/{employee}/document?company_id=1').json
- assert document['number']=='NP-01-000002'
+ assert document['number']=='NP-01-0000-2'
  assert document['legacy_number']=='KEEP-FIRST-ALIAS'
+ assert set(document['aliases'])=={legacy,'KEEP-FIRST-ALIAS'}
 
 
 def test_personal_actual_snapshot_freezes_full_ideal_format_including_explicit_blanks(ready):

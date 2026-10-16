@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import expect, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.commitments import PROFILE_FIELDS
+from app.commitments import PROFILE_FIELDS, COMMITMENT_KEYS, SUMMARY_NOTE
 
 
 NS = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -29,7 +29,7 @@ def word_content(payload):
         assert package.testzip() is None
         root = ET.fromstring(package.read('word/document.xml'))
         content = '\n'.join(node.text or '' for node in root.findall('.//w:t', NS))
-        headings = [node.text for node in root.findall('.//w:body/w:p/w:r/w:t', NS)
+        headings = [node.text for node in root.findall('.//w:t', NS)
                     if node.text and re.match(r'^[۰-۹]+\. ', node.text)]
         assert root.findall('.//w:bidi', NS) and root.findall('.//w:rtl', NS)
         assert any(name.startswith('word/media/') for name in package.namelist())
@@ -105,7 +105,7 @@ def check(base):
         page.locator('#person').select_option(str(eid))
         page.locator('#edit-person-document').wait_for()
         number = page.locator('#passport-number').input_value()
-        assert re.fullmatch(r'NP-01-\d{6}', number), number
+        assert re.fullmatch(r'NP-01-\d{4}(?:-[1-9]\d*)?', number), number
         expect(page.locator('#personal-document-state')).to_contain_text('پیش‌نویس')
         page.locator('#edit-person-document').click()
         assert page.locator('#fields [name]').evaluate_all('nodes=>nodes.map(node=>node.name)') == ideal_fields
@@ -143,14 +143,17 @@ def check(base):
             with page.expect_download() as event:
                 page.locator(selector).click()
             content, headings = word_content(Path(event.value.path()).read_bytes())
-            assert commitments in content and '<script>window.bad=1</script>' in content
+            assert commitments in content
             assert 'اختیارات جدید الگوی مطلوب' not in content
             assert 'نام محرمانه شرکت دیگر' not in content
             if selector == '#download-person-profile':
+                assert '<script>window.bad=1</script>' in content
                 assert headings == ideal_headings
                 assert 'شماره قرارداد کار' not in content and 'اعلام آگاهی و تعهد شغلی' not in content
             else:
                 assert len(headings) == 8
+                assert SUMMARY_NOTE in content and '…' in content
+                assert '<script>window.bad=1</script>' not in content
                 assert 'اعلام آگاهی و تعهد شغلی' in content and 'نماینده مجاز شرکت' in content
                 assert 'تنظیم و پیگیری تقویم آموزشی' not in content
                 assert ideal['education'] not in content and ideal['definition'] not in content
@@ -183,6 +186,7 @@ def check(base):
         assert preview.locator('.signatures').evaluate('element=>getComputedStyle(element).breakInside') == 'avoid'
         pdf = preview.pdf(path='/tmp/nikan-commitment-print.pdf', print_background=True, prefer_css_page_size=True)
         assert pdf.startswith(b'%PDF') and len(pdf) > 10000
+        assert len(re.findall(rb'/Type\s*/Page(?!s)\b', pdf)) == 1
         preview.emulate_media(media='screen')
         preview.set_viewport_size({'width': 390, 'height': 844})
         assert preview.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -193,6 +197,38 @@ def check(base):
         preview.close()
         assert {path: get(path) for path in before} == before
         assert page.request.get(base + f'/api/passports/{foreign}/commitment?company_id=1').status == 404
+
+        # Every selected field may contain thousands of literal characters.
+        # The separate excerpt stays on one page; nothing is hidden by overflow.
+        stress_id = write('post', 'data/employees?company_id=1', {
+            'code': 'ANNEX-9999', 'name': 'نام و نام خانوادگی طولانی شاغل ' * 30,
+            'job': job, 'department': 'واحد سازمانی طولانی ' * 30,
+        })['id']
+        long_value = ('گردآوری نیازهای آموزشی و پیگیری اجرای امور محوله در شرایط جاری سازمان؛ ' * 200)[:10000]
+        write('put', f'passports/{stress_id}/document?company_id=1',
+              {'overrides': {key: long_value for key in COMMITMENT_KEYS}})
+        with page.expect_popup() as event:
+            page.evaluate('(url) => window.open(url)', base + f'/api/passports/{stress_id}/commitment?company_id=1')
+        stress = event.value
+        stress.wait_for_load_state()
+        expect(stress.locator('.clause')).to_have_count(8)
+        expect(stress.locator('.unsigned').last).to_contain_text('یک‌صفحه‌ای')
+        assert stress.locator('.clause p').evaluate_all('nodes => nodes.every(node => node.textContent.endsWith("…"))')
+        stress.emulate_media(media='print')
+        stress_pdf = stress.pdf(path='/tmp/nikan-commitment-long-print.pdf', print_background=True, prefer_css_page_size=True)
+        assert len(re.findall(rb'/Type\s*/Page(?!s)\b', stress_pdf)) == 1
+        # There is no clipping or font-shrinking workaround for the source text.
+        assert stress.locator('.commitment-sheet').evaluate('node => !["hidden","clip"].includes(getComputedStyle(node).overflow)')
+        assert get(f'passports/{stress_id}/document?company_id=1')['effective']['duties'] == long_value
+        for label, glyph in (('latin', 'Q'), ('arabic', 'ض')):
+            write('put', f'passports/{stress_id}/document?company_id=1',
+                  {'overrides': {key: glyph * 10000 for key in COMMITMENT_KEYS}})
+            stress.reload()
+            edge_pdf = stress.pdf(path=f'/tmp/nikan-commitment-{label}-print.pdf',
+                                  print_background=True, prefer_css_page_size=True)
+            assert len(re.findall(rb'/Type\s*/Page(?!s)\b', edge_pdf)) == 1
+            assert get(f'passports/{stress_id}/document?company_id=1')['effective']['duties'] == glyph * 10000
+        stress.close()
 
         # Own-company read-only users can export, with no writing controls or cross-company access.
         page.locator('#logout').click()
@@ -210,7 +246,7 @@ def check(base):
         assert page.request.get(base + f'/api/passports/{foreign}/commitment?company_id=2').status == 403
         assert not errors, errors
         browser.close()
-    print('Commitment browser passed: identical complete18field forms/Word layouts, separate compact8section annex, independent actual snapshot including blank, short reference, branded DOCX and escaped HTML preview, print button and A4PDF, desktop/mobile, export read-only and company/viewer scope.')
+    print('Commitment browser passed: identical complete18field forms/Word layouts, separate oneA4page8section excerpt including10000characterfields, independent actual snapshot including blank, short reference, branded DOCX and escaped HTML preview, print button and A4PDF, desktop/mobile, export read-only and company/viewer scope.')
 
 
 if __name__ == '__main__':

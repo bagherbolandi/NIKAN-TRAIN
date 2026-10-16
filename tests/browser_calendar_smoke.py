@@ -1,5 +1,6 @@
 """Real-browser coverage for the holding calendar and company-owned course controls."""
 import os
+import json
 import re
 import secrets
 import socket
@@ -14,6 +15,8 @@ from playwright.sync_api import expect, sync_playwright
 
 
 def check(base):
+    evidence = Path(os.environ.get('NIKAN_COST_EVIDENCE', '/tmp/nikan-cost-review'))
+    evidence.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(
             executable_path=os.environ.get('NIKAN_CHROMIUM', '/usr/bin/chromium'),
@@ -142,6 +145,122 @@ def check(base):
         roster = page.request.get(base + f'/api/courses/{holding2}/participants').json()
         assert {person['id'] for person in roster['participants']} == {employee1, employee2}
 
+        # Actual attendance is separate from planned participation. The server
+        # distributes 101 rials as 67/34 for two attendees versus one, with no
+        # allocation at all until the attendance write is committed.
+        employee3 = post('data/employees?company_id=1', {'code': 'EPLAN3', 'name': 'فرد سوم شرکت اول', 'job': 'کارشناس', 'department': 'آموزش'})['id']
+        response = page.request.put(base + f'/api/courses/{holding2}/participants',
+                                    data={'employee_ids': [employee1, employee2, employee3]},
+                                    headers={'X-CSRF-Token': csrf})
+        assert response.ok, response.text()
+        response = page.request.put(base + f'/api/data/courses/{holding2}?company_id=2',
+                                    data={'cost': 0.000101, 'status': 'completed'},
+                                    headers={'X-CSRF-Token': csrf})
+        assert response.ok, response.text()
+        page.locator(f'[data-attendance-course="{holding2}"]').click()
+        expect(page.locator('#attendance-table tbody tr')).to_have_count(3)
+        expect(page.locator('#course-cost-report')).to_contain_text('هنوز حضور واقعی ثبت نشده است')
+        expect(page.locator('#cost-allocation-summary')).to_contain_text('۱۰۱ ریال')
+        for company_id in (1, 2):
+            expect(page.locator(f'[data-allocation-company="{company_id}"] [data-cost-rials]')).to_have_text('۰')
+        expect(page.locator('#save-course-attendance')).to_be_disabled()
+        assert page.locator('#attendance-course img,#attendance-table img').count() == 0
+        page.locator('#course-cost-report').screenshot(path=str(evidence / 'holding-cost-zero-attendance.png'))
+        page.locator('#attendance-search').fill('EPLAN1')
+        page.locator(f'[data-attendee="{employee1}"]').check()
+        expect(page.locator('#attendance-pending')).to_contain_text('هنوز ذخیره نشده')
+        expect(page.locator('#course-cost-report')).to_contain_text('هنوز حضور واقعی ثبت نشده است')
+        page.locator('#attendance-search').fill('')
+        page.locator('#attendance-company').select_option('1')
+        page.locator(f'[data-attendee="{employee3}"]').check()
+        page.locator('#attendance-company').select_option('2')
+        page.locator(f'[data-attendee="{employee2}"]').check()
+        page.locator('#attendance-company').select_option('1')
+        expect(page.locator(f'[data-attendee="{employee1}"]')).to_be_checked()
+        expect(page.locator(f'[data-attendee="{employee3}"]')).to_be_checked()
+        expect(page.locator('#attendance-selected')).to_contain_text('۳ نفر حاضر از ۳ نفر')
+        attendance_route = re.compile(rf'/api/courses/{holding2}/attendance$')
+        attendance_requests, held_attendance_writes = [], []
+
+        def hold_attendance_write(route):
+            if route.request.method == 'PUT':
+                attendance_requests.append(route.request.post_data_json)
+                held_attendance_writes.append(route)
+            else:
+                route.continue_()
+
+        page.route(attendance_route, hold_attendance_write)
+        with page.expect_request(attendance_route):
+            page.locator('#save-course-attendance').evaluate('button => { button.click(); button.click(); }')
+        for selector in ('#save-course-attendance', '#attendance-search', '#attendance-company', f'[data-attendee="{employee1}"]'):
+            expect(page.locator(selector)).to_be_disabled()
+        for button in page.locator('#course-attendance-dialog [data-attendance-close]').all():
+            expect(button).to_be_disabled()
+        page.locator('#company').evaluate("select => { select.value='2'; select.dispatchEvent(new Event('change', {bubbles:true})); }")
+        expect(page.locator('#company')).to_have_value('1')
+        page.locator('[data-page=employees]').evaluate('button => button.click()')
+        expect(page.locator('[data-page=courses]')).to_have_class('active')
+        assert len(attendance_requests) == len(held_attendance_writes) == 1
+        assert set(attendance_requests[0]['employee_ids']) == {employee1, employee2, employee3}
+        held_attendance_writes.pop().continue_()
+        expect(page.locator('[data-allocation-company="1"] [data-actual-count]')).to_have_text('۲')
+        expect(page.locator('[data-allocation-company="1"] [data-cost-rials]')).to_have_text('۶۷')
+        expect(page.locator('[data-allocation-company="2"] [data-actual-count]')).to_have_text('۱')
+        expect(page.locator('[data-allocation-company="2"] [data-cost-rials]')).to_have_text('۳۴')
+        expect(page.locator('[data-allocated-total]')).to_have_text('۱۰۱')
+        expect(page.locator('#save-course-attendance')).to_be_disabled()
+        expect(page.locator('#attendance-pending')).not_to_contain_text('هنوز ذخیره نشده')
+        assert len(attendance_requests) == 1
+        page.unroute(attendance_route, hold_attendance_write)
+        allocation = page.request.get(base + f'/api/courses/{holding2}/cost-allocation').json()
+        assert allocation['attendee_count'] == 3
+        assert allocation['allocated_cost_rials'] == allocation['total_cost_rials'] == 101
+        assert sum(row['cost_rials'] for row in allocation['companies']) == 101
+        (evidence / 'allocation-browser.json').write_text(json.dumps(allocation, ensure_ascii=False, indent=2), encoding='utf-8')
+        page.locator('#attendance-company').select_option('')
+        page.screenshot(path=str(evidence / 'holding-attendance-cost-desktop.png'), full_page=True)
+        page.locator('#course-cost-report').screenshot(path=str(evidence / 'holding-cost-report-desktop.png'))
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        assert page.locator('#course-attendance-dialog').evaluate('node => node.getBoundingClientRect().right <= innerWidth && node.getBoundingClientRect().left >= 0')
+        page.locator('#course-cost-report').scroll_into_view_if_needed()
+        page.screenshot(path=str(evidence / 'holding-attendance-cost-mobile.png'), full_page=True)
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        # A report read can fail after a successful attendance write. The form
+        # must retain the committed attendance and offer a read-only retry.
+        report_error = '<img src=x onerror=window.costXss=1> report unavailable'
+        page.route(f'**/api/courses/{holding2}/cost-allocation',
+                   lambda route: route.fulfill(status=503, json={'error': report_error}))
+        page.locator(f'[data-attendee="{employee2}"]').uncheck()
+        page.locator('#save-course-attendance').click()
+        expect(page.locator('#attendance-error')).to_contain_text(report_error)
+        expect(page.locator('#course-cost-report')).to_be_hidden()
+        expect(page.locator('#retry-cost-allocation')).to_be_visible()
+        assert page.locator('#attendance-error img').count() == 0
+        expect(page.locator('#save-course-attendance')).to_be_disabled()
+        persisted = page.request.get(base + f'/api/courses/{holding2}/attendance').json()
+        assert {person['id'] for person in persisted['participants'] if person['attended']} == {employee1, employee3}
+        page.unroute(f'**/api/courses/{holding2}/cost-allocation')
+        page.locator('#retry-cost-allocation').click()
+        expect(page.locator('#attendance-error')).to_be_empty()
+        expect(page.locator('#course-cost-report')).to_be_visible()
+        expect(page.locator('[data-allocation-company="1"] [data-cost-rials]')).to_have_text('۱۰۱')
+        expect(page.locator('[data-allocation-company="2"] [data-cost-rials]')).to_have_text('۰')
+        page.locator(f'[data-attendee="{employee2}"]').check()
+        page.locator('#save-course-attendance').click()
+        expect(page.locator('[data-allocation-company="1"] [data-cost-rials]')).to_have_text('۶۷')
+        expect(page.locator('[data-allocation-company="2"] [data-cost-rials]')).to_have_text('۳۴')
+        page.locator('#course-attendance-dialog [data-attendance-close]').last.click()
+        # A participant who has actually attended cannot disappear when the
+        # administrator edits the planning roster.
+        page.locator(f'[data-plan-course="{holding2}"]').click()
+        page.locator(f'[data-participant="{employee1}"]').uncheck()
+        page.locator('#save-course-participants').click()
+        expect(page.locator('#participant-error')).not_to_be_empty()
+        expect(page.locator('#course-participant-dialog')).to_be_visible()
+        page.locator('#course-participant-dialog [data-plan-close]').last.click()
+        assert page.request.get(base + f'/api/courses/{holding2}/cost-allocation').json() == allocation
+
         page.locator('#company').select_option('2')
         expect(page.locator('#course-management-title')).to_contain_text('نور ایستا خراسان')
         expect(page.locator('.calendar-event')).to_have_count(2)
@@ -196,9 +315,12 @@ def check(base):
         expect(page.locator('#calendar-grid')).to_contain_text('دوره داخلی تازه')
         assert unsafe_title not in page.locator('#calendar-grid').inner_text()
         assert page.locator('[data-plan-course]').count() == 0
+        assert page.locator('[data-attendance-course]').count() == 0
         assert page.request.get(base + '/api/calendar?scope=holding').status == 403
         assert page.request.get(base + '/api/holding/personnel').status == 403
         assert page.request.get(base + f'/api/courses/{holding2}/participants').status == 403
+        assert page.request.get(base + f'/api/courses/{holding2}/attendance').status == 403
+        assert page.request.get(base + f'/api/courses/{holding2}/cost-allocation').status == 403
         expect(page.locator('#table [data-edit]')).to_have_count(3)
         page.locator('#add').click()
         expect(page.locator('#entry [name=calendar_scope]')).to_have_value('internal')
@@ -218,9 +340,12 @@ def check(base):
         expect(page.locator('#calendar-grid')).to_contain_text('دوره داخلی تازه')
         assert unsafe_title not in page.locator('#calendar-grid').inner_text()
         assert page.locator('[data-plan-course]').count() == 0
+        assert page.locator('[data-attendance-course]').count() == 0
         assert page.request.get(base + '/api/calendar?scope=holding').status == 403
         assert page.request.get(base + '/api/holding/personnel').status == 403
         assert page.request.get(base + f'/api/courses/{holding2}/participants').status == 403
+        assert page.request.get(base + f'/api/courses/{holding2}/attendance').status == 403
+        assert page.request.get(base + f'/api/courses/{holding2}/cost-allocation').status == 403
         assert page.locator('#add,[data-edit],[data-delete]').count() == 0
         page.set_viewport_size({'width': 390, 'height': 844})
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
@@ -240,7 +365,7 @@ def check(base):
         expect(page.locator('#calendar-grid')).to_contain_text('دوره ساخته‌شده توسط شرکت')
         assert not errors, errors
         browser.close()
-    print('Calendar browser passed: holding/internal views, year/search, safe text, company-owned mutations, holding personnel planning with retained selections, cancellation, locked writes and duplicate prevention, admin-only consolidated access, company internal creation, viewer read-only, escaped API errors and retry.')
+    print('Calendar browser passed: holding/internal views, safe text, company-owned mutations, planned/actual attendance with retained filters and locked writes, zero-attendee allocation, exact 67/34 rial cost shares, desktop/mobile cost report, attended-roster protection, admin-only consolidated access, company internal creation, viewer read-only, escaped API errors and retry.')
 
 
 if __name__ == '__main__':

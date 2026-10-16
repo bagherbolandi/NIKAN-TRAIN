@@ -105,6 +105,32 @@ def validate(install,root):
  rejected(manager,'/api/holding/personnel',403);rejected(manager,roster_path,403)
  rejected(manager,roster_path,403,dict(employee_ids=[]),'PUT')
  assert admin.request('/api/data/records?company_id=1')==[]
+ attendance_path=f'/api/courses/{courses[0]}/attendance';allocation_path=f'/api/courses/{courses[0]}/cost-allocation'
+ assert all(not person['attended'] for person in admin.request(attendance_path)['participants'])
+ admin.request(f'/api/data/courses/{courses[0]}?company_id=1',dict(cost=1.000001),'PUT')
+ allocation=admin.request(allocation_path)
+ assert allocation['allocation_basis']=='actual_attendance' and allocation['planned_count']==2 and allocation['attendee_count']==0
+ assert allocation['allocated_cost_rials']==0 and allocation['unallocated_cost_rials']==1000001
+ extra=next(row['id'] for row in admin.request('/api/data/employees?company_id=1') if row['id']!=company_person)
+ selected.add(extra)
+ admin.request(roster_path,dict(employee_ids=sorted(selected)),'PUT')
+ admin.request(attendance_path,dict(employee_ids=[company_person]),'PUT')
+ allocation=admin.request(allocation_path)
+ assert allocation['planned_count']==3 and allocation['attendee_count']==1
+ assert {row['company_id']:row['cost_rials'] for row in allocation['companies']}=={1:1000001,2:0}
+ admin.request(attendance_path,dict(employee_ids=sorted(selected)),'PUT')
+ allocation=admin.request(allocation_path)
+ assert allocation['attendee_count']==3 and allocation['allocated_cost_rials']==1000001 and allocation['unallocated_cost_rials']==0
+ assert {row['company_id']:row['cost_rials'] for row in allocation['companies']}=={1:666667,2:333334}
+ assert sum(row['cost_rials'] for row in allocation['companies'])==allocation['total_cost_rials']
+ assert admin.request(allocation_path)==allocation
+ admin.request(roster_path,dict(employee_ids=sorted(selected)),'PUT')
+ assert admin.request(allocation_path)==allocation
+ rejected(admin,roster_path,400,dict(employee_ids=[]),'PUT')
+ rejected(admin,f'/api/courses/{internal}/cost-allocation',400)
+ for scoped in (manager,viewer):
+  rejected(scoped,attendance_path,403);rejected(scoped,allocation_path,403)
+  rejected(scoped,attendance_path,403,dict(employee_ids=[]),'PUT')
  assert admin.request('/api/companies')==original_companies
  # Include actual attachment and personal amendment bytes in the production backup.
  import sqlite3
@@ -124,10 +150,12 @@ def validate(install,root):
  assert admin.spreadsheet('/api/excel/import/assessments?company_id=1',payload,'commit')['applied']
  assert admin.spreadsheet('/api/excel/import/assessments?company_id=1',payload,'commit')['unchanged']==1
  document_path=f'/api/passports/{eid}/document?company_id=1';before_export=admin.request(document_path)
- assert before_export['number'].startswith('NP-') and before_export['is_snapshot']
+ assert before_export['number']=='NP-01-'+str(int(next(row['code'].rsplit('-',1)[1] for row in admin.request('/api/data/employees?company_id=1') if row['id']==eid))).zfill(4) and before_export['is_snapshot'] and before_export['aliases']==[]
  for suffix in ('commitment.docx','profile.docx'):
   blob=admin.request(f'/api/passports/{eid}/{suffix}?company_id=1',raw=True)
   with zipfile.ZipFile(io.BytesIO(blob)) as archive:assert 'Native independent commitment' in archive.read('word/document.xml').decode()
+ assert admin.request(document_path)==before_export
+ admin.request(f'/api/data/employees/{eid}?company_id=1',dict(code='NET-9876'),'PUT')
  assert admin.request(document_path)==before_export
  for scoped in (manager,viewer):
   rejected(scoped,'/api/excel/templates/competency-bank?company_id=2',403)
@@ -143,7 +171,7 @@ def validate(install,root):
   if time.monotonic()>deadline:raise AssertionError('Backup did not finish')
   time.sleep(.2)
  name=state['file'];assert state['verification']['verified'];assert state['verification']['tables']['employees']==17
- assert state['verification']['tables']['course_participants']==2
+ assert state['verification']['tables']['course_participants']==3
  assert state['verification']['tables']['company_registry']==1
  key=admin.request('/api/network/recovery-key',raw=True);assert len(key)==32
  archive=root/'backups'/name
@@ -156,10 +184,13 @@ def validate(install,root):
   app=create_app(target,True);c=app.test_client();assert c.post('/api/login',json={'username':username,'password':password}).status_code==200
   assert len(c.get('/api/data/employees?company_id=1').json)==16
   assert {p['id'] for p in c.get(roster_path).json['participants']}==selected
+  assert all(p['attended'] for p in c.get(attendance_path).json['participants'])
+  assert c.get(allocation_path).json==allocation
+  assert c.get(document_path).json==before_export
   assert c.get(f'/api/passports/{eid}?company_id=1').json['job']['commitments']=='Native independent commitment'
   assert c.get('/api/certificates/1?company_id=1').data==b'%PDF-native-network-proof'
   assert c.get('/api/companies').json==original_companies
- print('Network 0.9 payload passed: verified HTTPS, 16 concurrent writes, Excel multipart preview/import/repeat safety, short personal references and actual snapshots, readonly full/commitment Word exports, protected company/calendar/bank scopes, encrypted backup and full recovery, active-server protection.')
+ print('Network 0.10 payload passed: separate planned/actual attendance, exact whole-rial company allocation, protected readonly reporting and encrypted attendance recovery, verified HTTPS, 16 concurrent writes, Excel multipart preview/import/repeat safety, short personal references and actual snapshots, readonly full/commitment Word exports, protected company/calendar/bank scopes, encrypted backup and full recovery, active-server protection.')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--install',type=Path,required=True);p.add_argument('--data-dir',type=Path,required=True);a=p.parse_args();validate(a.install,a.data_dir)
