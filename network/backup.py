@@ -9,9 +9,9 @@ MAGIC=b'NIKANBK1';CHUNK=1024*1024
 TEHRAN=timezone(timedelta(hours=3,minutes=30))
 NAME=re.compile(r'^nikan-\d{8}T\d{6}Z-[0-9a-f]{16}\.nikbak$')
 REQUIRED={'companies','users','employees','skills','assessments','records','certificates','branding','personal_documents'}
-# These are the only new tables created by the supported 0.6 upgrade. Existing
+# These are the only new tables created by supported upgrades through 0.8. Existing
 # archived tables retain exact row counts; additions must match their migration.
-RECOVERY_ADDITIONS={'holding_catalog_state':1,'course_participants':0}
+RECOVERY_ADDITIONS={'holding_catalog_state':1,'course_participants':0,'company_registry':1}
 
 def digest(path):
  h=hashlib.sha256()
@@ -87,6 +87,10 @@ def recovery_check(backup,key,temp_root):
   if 'holding_catalog_state' in added:
    with sqlite3.connect(candidate) as conn:
     if conn.execute('SELECT key,value FROM holding_catalog_state').fetchall()!=[('initial_seed_complete','1')]:raise ValueError('نشانه مهاجرت بانک شایستگی معتبر نیست')
+  if 'company_registry' in added:
+   with sqlite3.connect(candidate) as conn:
+    maximum=conn.execute('SELECT MAX(value) FROM (SELECT 0 AS value UNION ALL SELECT id FROM companies UNION ALL SELECT company_id FROM audit)').fetchone()[0]
+    if conn.execute('SELECT id,high_watermark FROM company_registry').fetchall()!=[(1,maximum)]:raise ValueError('نشانه مهاجرت شرکت‌ها معتبر نیست')
   return dict(verified=True,checked_at=datetime.now(timezone.utc).isoformat(),sha256=header['sha256'],tables=header['tables'])
 
 class BackupManager:

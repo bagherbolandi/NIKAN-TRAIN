@@ -25,11 +25,11 @@ def legacy_archive(tmp_path):
  source=sqlite3.connect(app.config['DB']);destination=sqlite3.connect(snapshot)
  try:
   source.backup(destination)
-  destination.executescript('DROP TABLE course_participants; DROP TABLE holding_catalog_state; DROP INDEX courses_calendar_scope; ALTER TABLE courses DROP COLUMN calendar_scope;')
+  destination.executescript('DROP TABLE course_participants; DROP TABLE holding_catalog_state; DROP TABLE company_registry; DROP INDEX courses_calendar_scope; ALTER TABLE courses DROP COLUMN calendar_scope;')
  finally:destination.close();source.close()
  key=secrets.token_bytes(32);keyfile=tmp_path/'old-recovery.key';keyfile.write_bytes(key)
  archive=tmp_path/'old-encrypted.nikbak';header=encrypt(snapshot,archive,key)
- assert 'holding_catalog_state' not in header['tables'] and 'course_participants' not in header['tables']
+ assert not {'holding_catalog_state','course_participants','company_registry'}&set(header['tables'])
  return archive,key,keyfile,header,eid
 
 
@@ -45,7 +45,7 @@ def test_encrypted_pre_upgrade_backup_verifies_restores_and_migrates(legacy_arch
  app=create_app(target,True)
  migrated=inspect_db(app.config['DB'])
  assert {name:migrated[name] for name in header['tables']}==header['tables']
- assert migrated['holding_catalog_state']==1 and migrated['course_participants']==0
+ assert migrated['holding_catalog_state']==1 and migrated['course_participants']==0 and migrated['company_registry']==1
  client=app.test_client()
  assert client.post('/api/login',json={'username':'old-admin','password':'Upgrade-password-123'}).status_code==200
  assert client.get('/api/data/employees?company_id=1').json[0]['name']=='Archived employee'
@@ -57,7 +57,7 @@ def test_encrypted_pre_upgrade_backup_verifies_restores_and_migrates(legacy_arch
  assert client.get(f'/api/certificates/{certid}?company_id=1').data==b'%PDF-1.4\nArchived certificate\n%%EOF'
 
 
-@pytest.mark.parametrize('change',['archived_count','unexpected_table','unexpected_marker','nonempty_participants'])
+@pytest.mark.parametrize('change',['archived_count','unexpected_table','unexpected_marker','nonempty_participants','unexpected_company_registry','empty_company_registry'])
 def test_recovery_rejects_unsupported_or_destructive_migration(legacy_archive,tmp_path,monkeypatch,change):
  archive,key,keyfile,header,eid=legacy_archive
  import app as app_module
@@ -68,7 +68,9 @@ def test_recovery_rejects_unsupported_or_destructive_migration(legacy_archive,tm
    if change=='archived_count':conn.execute("INSERT INTO employees(company_id,code,name) VALUES (1,'UNEXPECTED','Unexpected employee')")
    elif change=='unexpected_table':conn.execute('CREATE TABLE unexpected_data(note TEXT)')
    elif change=='unexpected_marker':conn.execute("UPDATE holding_catalog_state SET value='unexpected'")
-   else:conn.execute('INSERT INTO course_participants SELECT c.id,e.id FROM courses c CROSS JOIN employees e LIMIT 1')
+   elif change=='nonempty_participants':conn.execute('INSERT INTO course_participants SELECT c.id,e.id FROM courses c CROSS JOIN employees e LIMIT 1')
+   elif change=='unexpected_company_registry':conn.execute('UPDATE company_registry SET high_watermark=999')
+   else:conn.execute('DELETE FROM company_registry')
   return migrated_app
  monkeypatch.setattr(app_module,'create_app',invalid_migration)
  with pytest.raises(ValueError):recovery_check(archive,key,tmp_path)

@@ -2,6 +2,7 @@
 import struct,json,os,subprocess,ctypes
 from pathlib import Path
 from flask import request,jsonify,Response,g
+from .validation import positive_id
 SCHEMA='''CREATE TABLE IF NOT EXISTS branding(key TEXT PRIMARY KEY,mime TEXT NOT NULL,content BLOB NOT NULL,icon BLOB,updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);'''
 def write_icon(png,root):
  root.mkdir(parents=True,exist_ok=True);path=root/'holding.ico'
@@ -46,10 +47,11 @@ def register(app,db,authenticated,audit,error):
  @authenticated
  def upload(key):
   if g.user['role']!='admin':raise PermissionError()
+  cid=None
   if key!='holding':
    if not key.startswith('company-'):raise ValueError('شناسه لوگو نامعتبر است')
-   try:cid=int(key[8:])
-   except ValueError:raise ValueError('شرکت نامعتبر است')
+   cid=positive_id(key[8:])
+   if key!='company-'+str(cid):raise ValueError('شناسه لوگو نامعتبر است')
    if not db().execute('SELECT 1 FROM companies WHERE id=?',(cid,)).fetchone():raise ValueError('شرکت نامعتبر است')
   f=request.files.get('file')
   if not f:raise ValueError('فایل لوگو را انتخاب کنید')
@@ -62,6 +64,8 @@ def register(app,db,authenticated,audit,error):
   if key=='holding' and request.files.get('icon'):
    icon=request.files['icon'].read(512*1024+1)
    if len(icon)>512*1024 or not icon.startswith(b'\x89PNG\r\n\x1a\n') or len(icon)<24 or struct.unpack('>II',icon[16:24])!=(256,256):raise ValueError('نماد برنامه نامعتبر است')
+  db().execute('BEGIN IMMEDIATE')
+  if cid is not None and not db().execute('SELECT 1 FROM companies WHERE id=?',(cid,)).fetchone():raise ValueError('شرکت حذف شده است؛ فهرست شرکت‌ها را تازه کنید')
   db().execute('INSERT INTO branding(key,mime,content,icon) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET mime=excluded.mime,content=excluded.content,icon=excluded.icon,updated=CURRENT_TIMESTAMP',(key,mime,content,icon));audit('update_branding',detail=key);db().commit()
   icon_ok=True
   if icon:

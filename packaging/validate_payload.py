@@ -17,6 +17,19 @@ with tempfile.TemporaryDirectory() as root:
  assert me['network'] is False
  assert len(c.get('/api/competency-bank').json)==281
  h={'X-CSRF-Token':me['csrf']}
+ # The 0.8 company registry must support safe administration without changing
+ # the original six-company fixture used by the training/permission checks.
+ original_companies=c.get('/api/companies').json
+ assert len(original_companies)==6
+ created=c.post('/api/companies',headers=h,json={'name':'Payload disposable company'})
+ assert created.status_code==201,created.json
+ company_id=created.json['id'];company_path=f'/api/companies/{company_id}'
+ assert any(r['id']==company_id for r in c.get('/api/me').json['companies'])
+ assert c.put(company_path,headers=h,json={'name':'Payload renamed company'}).status_code==200
+ assert next(r['name'] for r in c.get('/api/companies').json if r['id']==company_id)=='Payload renamed company'
+ assert c.delete(company_path,headers=h).status_code==200
+ assert c.get('/api/companies').json==original_companies
+ assert c.get('/api/me').json['companies']==original_companies
  assert c.post('/api/competency-bank/adopt?company_id=1',headers=h).status_code==200
  assert c.get('/api/data/job_profiles?company_id=1').json
  assert c.get('/api/dashboard?company_id=2').json['employees']==0
@@ -51,11 +64,17 @@ with tempfile.TemporaryDirectory() as root:
  assert {r['id'] for r in c.get(roster).json['participants']}==set(employees)
  assert c.get('/api/data/records?company_id=1').json==[]
  assert c.delete('/api/competency-bank/PAYLOAD-SHARED',headers=h).status_code==409
+ assert c.delete('/api/companies/1',headers=h).status_code==409
+ assert c.get('/api/companies').json==original_companies
  for role in ('manager','viewer'):
   name='validation-'+role
   assert c.post('/api/users',headers=h,json={'username':name,'password':'Temporary-role-password-123','role':role,'company_id':2}).status_code==201
   scoped=app.test_client();assert scoped.post('/api/login',json={'username':name,'password':'Temporary-role-password-123'}).status_code==200
   sh={'X-CSRF-Token':scoped.get('/api/me').json['csrf']}
+  assert scoped.get('/api/companies').status_code==403
+  assert scoped.post('/api/companies',headers=sh,json={'name':'Forbidden company'}).status_code==403
+  assert scoped.put('/api/companies/2',headers=sh,json={'name':'Forbidden rename'}).status_code==403
+  assert scoped.delete('/api/companies/2',headers=sh).status_code==403
   assert scoped.get('/api/calendar').status_code==403
   assert scoped.get('/api/calendar?scope=holding').status_code==403
   own_internal=scoped.get('/api/calendar?scope=internal&company_id=2')
@@ -84,6 +103,7 @@ with tempfile.TemporaryDirectory() as root:
   assert scoped.delete('/api/competency-bank/PAYLOAD-SHARED',headers=sh).status_code==403
   assert scoped.post('/api/competency-bank/PAYLOAD-SHARED/select?company_id=2',headers=sh).status_code==(200 if role=='manager' else 403)
  assert {r['id'] for r in c.get('/api/calendar').json}==set(courses)
+ assert c.get('/api/companies').json==original_companies
  snapshot=c.post('/api/backup',headers=h)
  assert snapshot.data.startswith(b'SQLite format 3'),snapshot.status_code
  restored_dir=Path(root)/'restored';restored_dir.mkdir()
@@ -91,7 +111,11 @@ with tempfile.TemporaryDirectory() as root:
  restored=create_app(restored_dir,True).test_client()
  assert restored.post('/api/login',json={'username':'validation-admin','password':'Test-only-password-123'}).status_code==200
  assert {r['id'] for r in restored.get(roster).json['participants']}==set(employees)
- print('Standalone 0.7 features passed: admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.')
+ assert restored.get('/api/companies').json==original_companies
+ import sqlite3
+ with sqlite3.connect(restored_dir/'nikan.sqlite3') as restored_db:
+  assert restored_db.execute('SELECT count(*) FROM company_registry').fetchone()[0]==1
+ print('Standalone 0.8 features passed: admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.')
  server=create_server(app,host='127.0.0.1',port=0);thread=threading.Thread(target=server.run,daemon=True);thread.start()
  try:
   with urllib.request.urlopen(f'http://127.0.0.1:{server.effective_port}/api/status') as response:assert response.status==200

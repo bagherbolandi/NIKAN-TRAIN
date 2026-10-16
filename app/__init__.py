@@ -38,8 +38,10 @@ def create_app(data_dir=None,testing=False):
   c=g.pop('db',None)
   if c:c.close()
  with app.app_context():
+  existing_companies=db().execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='companies'").fetchone() is not None
   db().executescript(SCHEMA)
-  db().executemany('INSERT OR IGNORE INTO companies(name) VALUES (?)',[(n,) for n in COMPANIES]);db().commit()
+  from .companies import initialize as initialize_companies
+  initialize_companies(db(),COMPANIES,seed_defaults=not existing_companies)
  def error(message,status=400):return jsonify(error=message),status
  @app.before_request
  def same_origin():
@@ -284,4 +286,6 @@ def create_app(data_dir=None,testing=False):
  register_training_calendar(app,db,authenticated,company)
  from .holding_planning import register as register_holding_planning
  register_holding_planning(app,db,authenticated,audit,error)
+ from .companies import register as register_companies
+ register_companies(app,db,authenticated,audit,error)
  return app

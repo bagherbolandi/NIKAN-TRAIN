@@ -47,6 +47,16 @@ def validate(install,root):
  def rejected(client,path,status,data=None,method=None):
   try:client.request(path,data,method);raise AssertionError('Unexpected access: '+path)
   except urllib.error.HTTPError as exc:assert exc.code==status;assert json.loads(exc.read())['error']
+ original_companies=admin.request('/api/companies');assert len(original_companies)==6
+ company_id=admin.request('/api/companies',dict(name='Network disposable company'))['id']
+ company_path=f'/api/companies/{company_id}'
+ assert any(r['id']==company_id for r in admin.request('/api/me')['companies'])
+ admin.request(company_path,dict(name='Network renamed company'),'PUT')
+ assert next(r['name'] for r in admin.request('/api/companies') if r['id']==company_id)=='Network renamed company'
+ admin.request(company_path,method='DELETE')
+ assert admin.request('/api/companies')==original_companies
+ assert admin.request('/api/me')['companies']==original_companies
+ rejected(admin,'/api/companies/1',409,method='DELETE')
  admin.request('/api/competency-bank',dict(code='NET-SHARED',title='Network shared competency'))
  courses=[]
  for cid in (1,2):
@@ -56,6 +66,10 @@ def validate(install,root):
  assert {r['id'] for r in admin.request('/api/calendar')}==set(courses)
  viewer=Client();viewer.login('viewer2',password)
  for scoped in (manager,viewer):
+  rejected(scoped,'/api/companies',403)
+  rejected(scoped,'/api/companies',403,dict(name='Forbidden company'),'POST')
+  rejected(scoped,'/api/companies/2',403,dict(name='Forbidden rename'),'PUT')
+  rejected(scoped,'/api/companies/2',403,method='DELETE')
   rejected(scoped,'/api/calendar',403)
   rejected(scoped,'/api/calendar?scope=holding',403)
   assert [r['id'] for r in scoped.request('/api/calendar?scope=internal&company_id=2')]==[internal]
@@ -83,6 +97,7 @@ def validate(install,root):
  rejected(manager,'/api/holding/personnel',403);rejected(manager,roster_path,403)
  rejected(manager,roster_path,403,dict(employee_ids=[]),'PUT')
  assert admin.request('/api/data/records?company_id=1')==[]
+ assert admin.request('/api/companies')==original_companies
  # Include actual attachment and personal amendment bytes in the production backup.
  import sqlite3
  conn=sqlite3.connect(root/'nikan.sqlite3');eid=conn.execute('SELECT id FROM employees LIMIT 1').fetchone()[0]
@@ -99,6 +114,7 @@ def validate(install,root):
   time.sleep(.2)
  name=state['file'];assert state['verification']['verified'];assert state['verification']['tables']['employees']==17
  assert state['verification']['tables']['course_participants']==2
+ assert state['verification']['tables']['company_registry']==1
  key=admin.request('/api/network/recovery-key',raw=True);assert len(key)==32
  archive=root/'backups'/name
  # A running server must refuse destructive recovery.
@@ -112,7 +128,8 @@ def validate(install,root):
   assert {p['id'] for p in c.get(roster_path).json['participants']}==selected
   assert c.get(f'/api/passports/{eid}?company_id=1').json['job']['commitments']=='Native independent commitment'
   assert c.get('/api/certificates/1?company_id=1').data==b'%PDF-native-network-proof'
- print('Network 0.7 payload passed: verified HTTPS, 16 concurrent writes, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document recovery, active-server protection.')
+  assert c.get('/api/companies').json==original_companies
+ print('Network 0.8 payload passed: verified HTTPS, 16 concurrent writes, admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document/company-registry recovery, active-server protection.')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--install',type=Path,required=True);p.add_argument('--data-dir',type=Path,required=True);a=p.parse_args();validate(a.install,a.data_dir)

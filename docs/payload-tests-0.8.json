@@ -1,0 +1,29 @@
+{
+  "platform": "Linux Python 3.12.14 and Chromium",
+  "native_windows_executed": false,
+  "standalone": {
+    "execution": "Actual extracted desktop/app with standalone-only dependencies",
+    "checks": {
+      "payload": {
+        "passed": true,
+        "output": "Standalone 0.8 features passed: admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.\nPayload validation passed: linux 3.12.14\nPackaged desktop: browser handoff survival, server readiness and clean shutdown passed."
+      },
+      "companies": {
+        "passed": true,
+        "output": "PASS: companies browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "companies_empty": {
+        "passed": true,
+        "output": "PASS: companies_empty browser workflow on extracted standalone desktop with standalone-only dependencies"
+      }
+    }
+  },
+  "network": {
+    "platform": "linux",
+    "scope": "Extracted application using Linux development Python and verified HTTPS; Windows installer execution not tested.",
+    "validator_exit_code": 0,
+    "stop_command_exit_code": 0,
+    "server_exit_code": 0
+  },
+  "network_output": "Network 0.8 payload passed: verified HTTPS, 16 concurrent writes, admin-only company creation/rename/safe deletion, company deletion protects stored data, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document/company-registry recovery, active-server protection."
+}
