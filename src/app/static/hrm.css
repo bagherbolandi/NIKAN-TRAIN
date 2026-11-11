@@ -1,0 +1,42 @@
+/* Nikan HRM — additive styles, reuses the existing RTL design tokens. */
+.hrm-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.hrm-tabs button { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 8px; padding: 8px 14px; cursor: pointer; font: inherit; font-size: 12px; }
+.hrm-tabs button.selected { background: var(--blue); border-color: var(--blue); color: #fff; }
+.hrm-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin: 18px 0; }
+.hrm-form label { display: block; margin-bottom: 14px; min-width: 0; font-size: 12px; }
+.hrm-form label > input, .hrm-form label > select, .hrm-form label > textarea { width: 100%; box-sizing: border-box; margin-top: 6px; }
+.hrm-form label.wide { grid-column: 1 / -1; }
+.hrm-form textarea { min-height: 90px; }
+.hrm-form .help { font-size: 11px; margin: 4px 0 0; }
+.hrm-form .hrm-check { display: flex; align-items: center; gap: 8px; }
+.hrm-form .hrm-check input { width: auto; margin: 0; }
+.hrm-master { display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.hrm-master .master-panel { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 14px; }
+.hrm-master .master-panel input, .hrm-master .master-panel select { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+.hrm-item { display: block; width: 100%; text-align: right; border: 1px solid transparent; background: transparent; border-radius: 9px; padding: 10px 12px; cursor: pointer; font: inherit; margin-bottom: 4px; }
+.hrm-item b, .hrm-item small { display: block; }
+.hrm-item small { color: var(--muted); font-size: 10px; margin-top: 3px; }
+.hrm-item:hover { background: #f4f8ff; }
+.hrm-item.selected { background: #eaf1ff; border-color: #bcd2f5; }
+.hrm-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 10px; background: #eef3fa; color: #3b567c; }
+.hrm-badge.warn { background: #fff2d9; color: #9a6411; }
+.hrm-badge.ok { background: #e8f6ed; color: #217347; }
+.hrm-badge.bad { background: #fdeaea; color: #a13030; }
+.hrm-note { background: #f8faff; border: 1px dashed #cfdcf0; border-radius: 10px; padding: 14px; line-height: 2; font-size: 12px; color: #44618a; }
+.hrm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.hrm-actions button { font-size: 11px; padding: 8px 12px; }
+.hrm-table-actions { white-space: nowrap; }
+.hrm-table-actions button { margin-left: 4px; font-size: 11px; padding: 5px 9px; }
+.hrm-filter { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 16px; }
+.hrm-filter label { min-width: 160px; margin-bottom: 0; }
+.hrm-filter input, .hrm-filter select { width: 100%; box-sizing: border-box; }
+.hrm-scroll { max-height: 460px; overflow: auto; }
+.hrm-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; }
+.hrm-kv div { border-bottom: 1px solid var(--line); padding: 8px 0; font-size: 12px; }
+.hrm-kv small { display: block; color: var(--muted); font-size: 10px; }
+#hrm-dialog { width: 720px; }
+#hrm-dialog form > button { margin-top: 8px; }
+@media (max-width: 900px) {
+ .hrm-master, .hrm-form, .hrm-kv { grid-template-columns: 1fr; }
+ .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

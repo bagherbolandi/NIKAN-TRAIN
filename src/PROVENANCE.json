@@ -1,0 +1,26 @@
+{
+  "version": "0.12.0",
+  "product": "Nikan HRM",
+  "source_repository": "https://github.com/bagherbolandi/NIKAN-TRAIN",
+  "base_version": "0.11.2",
+  "base_source": "NikanTraining-0.11.2-Source.zip from main@6a98f062a2d5a18d06eb5515ceb68a24e97c916f",
+  "base_source_provenance": {
+    "observed_main_commit": "248728d49c2c9577a1646667fe718df890320d07",
+    "original_desktop_installer_blob": "b919186ad7cbaad7c4310fa07cb9ab3b41b76fad",
+    "base": "Python source recovered from byte-identical local desktop installer",
+    "date": "2026-11-11"
+  },
+  "hrm": {
+    "date": "2026-11-11",
+    "approach": "Additive migrations and modules on the existing application; training tables, routes, roles and installers preserved",
+    "modules": ["personnel", "contracts", "attendance", "performance", "benefits", "welfare", "reservations", "requests", "reports", "access"],
+    "migration": "0.12.0-hrm-base and 0.12.1-hrm-request-link recorded in schema_migrations",
+    "database": "Central SQLite on local server disk (WAL); SQL Server Express upgrade path documented",
+    "dates": "Shamsi in UI, ISO 8601 in database",
+    "confidential_documents": "Require separate explicit grants; system_admin role alone is not sufficient",
+    "installer": "build_hrm.py — no install-time PowerShell, version resource, native schtasks/netsh uninstall",
+    "tests": "18 HRM integration tests + 17 pre-existing regression tests + jsdom UI smoke (qa-hrm-ui.cjs)"
+  },
+  "installer_fix": "Preflight PowerShell removed from install time; desktop.py single-instance mutex retained",
+  "password_recovery": "Locally issued, hashed, one-use 30-minute recovery codes with session revocation (unchanged)"
+}
