@@ -1,0 +1,8 @@
+{
+  "base_training_tag": "v0.10.0",
+  "base_training_commit": "094dfff47196af17b8c0d0866d3c2abb82d622fa",
+  "uploaded_source_commit": "6a98f062a2d5a18d06eb5515ceb68a24e97c916f",
+  "uploaded_archive": "NikanTraining-0.11.2-Source.zip",
+  "archive_sha256": "040f68443518cce0cbc952bacd4fcd066aab3c82271f75eac5368f962d7455bc",
+  "policy": "Preserve uploaded0.11.2 application, prior encrypted network stack/tests/build, and existing logos/workbook. No database seed copied into production."
+}
