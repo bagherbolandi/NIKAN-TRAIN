@@ -1,0 +1,23 @@
+{
+  "manifest_files_verified": 2016,
+  "source_files_compared": 29,
+  "required_new_modules": [
+    "app/training_calendar.py",
+    "app/holding_planning.py",
+    "app/catalog.py",
+    "network/backup.py"
+  ],
+  "manifest_matches_distribution": true,
+  "no_local_database_or_key": true,
+  "outputs": {
+    "NikanTraining-Network-Server-Setup.exe": {
+      "size_bytes": 16012243,
+      "sha256": "9557c938482fa7a853f95e0868145ca85a31dd95f427c2c6fa543d2e55241810"
+    },
+    "NikanTraining-Network-Client-Setup.exe": {
+      "size_bytes": 162566,
+      "sha256": "840f22528ec4a0b8f7fb9945aefbe9b09a4b9ac0909fc5a54f2bbd15a471257f"
+    }
+  },
+  "native_windows_executed": false
+}

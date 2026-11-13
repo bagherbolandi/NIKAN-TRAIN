@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} | {{ annex_identity.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='commitment.css') }}">
+  <script src="{{ url_for('static', filename='commitment.js') }}" defer></script>
+</head>
+<body>
+  <nav class="preview-tools" aria-label="خروجی پیوست قرارداد">
+    <div><strong>پیش‌نمایش خلاصه تعهدات و وظایف</strong><span>برای چاپ یا ذخیره PDF از دکمه چاپ یا کلیدهای Ctrl+P استفاده کنید.</span></div>
+    <div class="preview-actions"><button type="button" id="print-commitment">چاپ / ذخیره PDF</button><a href="{{ docx_url }}" download>دریافت فایل Word</a></div>
+  </nav>
+  <main class="commitment-sheet">
+    <header class="letterhead">
+      {% if logo_uri %}<img src="{{ logo_uri }}" alt="لوگوی ثبت‌شده هلدینگ" class="holding-logo">{% else %}<strong class="wordmark" dir="ltr">NIKAN</strong>{% endif %}
+      <div><strong>{{ annex_identity.company }}</strong><p>پیوست شرح وظایف و تعهدات شغلی</p></div>
+    </header>
+    <h1>{{ title }}</h1>
+    <p class="unsigned">فرم بدون امضا — برای تکمیل و امضای طرفین قرارداد</p>
+    <p class="unsigned">{{ summary_note }}</p>
+    <p class="document-state{% if requires_review %} completion-note{% endif %}">{{ status_label }}</p>
+    <p class="document-number">شماره شناسنامه فردی: <bdi dir="ltr">{{ annex_number }}</bdi></p>
+    <dl class="identity-grid">
+      <div><dt>شرکت</dt><dd>{{ annex_identity.company }}</dd></div>
+      <div><dt>نام و نام خانوادگی</dt><dd>{{ annex_identity.name }}</dd></div>
+      <div><dt>کد پرسنلی</dt><dd><bdi>{{ annex_identity.code }}</bdi></dd></div>
+      <div><dt>سمت شغلی</dt><dd>{{ annex_identity.job or 'تکمیل شود' }}</dd></div>
+      <div><dt>واحد سازمانی</dt><dd>{{ annex_identity.department or 'تکمیل شود' }}</dd></div>
+      <div><dt>شماره قرارداد کار</dt><dd class="blank">................................</dd></div>
+      <div><dt>تاریخ قرارداد کار</dt><dd class="blank">........ / ........ / ........</dd></div>
+      <div><dt>تاریخ اجرا</dt><dd>{{ annex_effective_date or '................' }}</dd></div>
+      <div><dt>بازنگری بعدی</dt><dd>{{ annex_review_date or '................' }}</dd></div>
+    </dl>
+    {% if missing_profile %}<p class="completion-note">شرح شغل این فرد هنوز تکمیل نشده است؛ بخش‌های خالی پیش از امضا تکمیل شود.</p>{% endif %}
+    <div class="clauses">
+    {% for field in commitment_fields %}
+      <section class="clause">
+        <h2>{{ loop.index }}. {{ field.label }}</h2>
+        <p{% if not field.value %} class="blank"{% endif %}>{{ field.value or 'تکمیل شود: ................................................................................' }}</p>
+      </section>
+    {% endfor %}
+    </div>
+    <section class="declaration">
+      <h2>اعلام آگاهی و تعهد شغلی</h2>
+      <p>{{ declaration }}</p>
+      <div class="signatures">
+        <section><h3>کارمند / کارگر</h3><p>نام و نام خانوادگی: {{ annex_identity.name }}</p><p class="signature-line">امضا: ................................</p><p>تاریخ: ........ / ........ / ........</p></section>
+        <section><h3>نماینده مجاز شرکت</h3><p>نام و نام خانوادگی: ................................</p><p class="signature-line">امضا: ................................</p><p>تاریخ: ........ / ........ / ........</p></section>
+        <section><h3>منابع انسانی</h3><p>نام و نام خانوادگی: ................................</p><p class="signature-line">امضا: ................................</p><p>تاریخ: ........ / ........ / ........</p></section>
+      </div>
+    </section>
+    <footer class="document-references">
+      <p>مرجع شناسنامه شغل: <bdi dir="ltr">{{ annex_master_number or 'تکمیل نشده' }}</bdi> · بازنگری اختصاصی فرد: {{ personal_revision }}</p>
+      {% if annex_legacy_number %}<p>شناسه قبلی برای تطبیق سوابق: <bdi dir="ltr">{{ annex_legacy_number }}</bdi></p>{% endif %}
+    </footer>
+  </main>
+</body>
+</html>

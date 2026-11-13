@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "stage": "completed",
+  "platform": "Microsoft Windows NT 10.0.26100.0",
+  "interpreter": "Payload validation passed: win32 3.13.16\r\nPackaged desktop: browser handoff survival, server readiness and clean shutdown passed.",
+  "details": ""
+}

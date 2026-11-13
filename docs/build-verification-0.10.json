@@ -1,0 +1,33 @@
+{
+  "standalone": {
+    "installer": "NikanTraining-Setup.exe",
+    "product_version": "0.10.0",
+    "size_bytes": 19317974,
+    "sha256": "054350d6220bf5c892aef9c34d1a3ad77deb1fba7c4d6bf9e2c7137a7ee3edbc",
+    "manifest_files_verified": 2214,
+    "source_files_compared": 33,
+    "wheel_count": 15,
+    "manifest_matches_distribution": true,
+    "no_database_or_keys": true,
+    "native_windows_executed": false
+  },
+  "network": {
+    "installer": "NikanTraining-Network-Server-Setup.exe",
+    "product_version": "0.10.0",
+    "size_bytes": 22241133,
+    "sha256": "6afadca58f332996121a3182de7173e8a64a87542348c9da39f22f61334920ad",
+    "manifest_files_verified": 2453,
+    "source_files_compared": 44,
+    "wheel_count": 21,
+    "manifest_matches_distribution": true,
+    "no_database_or_keys": true,
+    "native_windows_executed": false
+  },
+  "client": {
+    "installer": "NikanTraining-Network-Client-Setup.exe",
+    "size_bytes": 162566,
+    "sha256": "840f22528ec4a0b8f7fb9945aefbe9b09a4b9ac0909fc5a54f2bbd15a471257f",
+    "product_version": "0.5.0",
+    "role": "shortcut only"
+  }
+}

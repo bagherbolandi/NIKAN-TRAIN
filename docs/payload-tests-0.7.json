@@ -1,0 +1,37 @@
+{
+  "platform": "Linux Python 3.12.14 and Chromium",
+  "native_windows_executed": false,
+  "standalone": {
+    "execution": "Actual extracted desktop/app with standalone-only dependencies",
+    "checks": {
+      "payload": {
+        "passed": true,
+        "output": "Standalone 0.7 features passed: admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin bank CRUD, company select/use, cross-company personnel planning and SQLite backup recovery.\nPayload validation passed: linux 3.12.14\nPackaged desktop: browser handoff survival, server readiness and clean shutdown passed."
+      },
+      "calendar": {
+        "passed": true,
+        "output": "Calendar browser passed: holding/internal views, year/search, safe text, company-owned mutations, holding personnel planning with retained selections, cancellation, locked writes and duplicate prevention, admin-only consolidated access, company internal creation, viewer read-only, escaped API errors and retry.\nPASS: calendar browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "bank": {
+        "passed": true,
+        "output": "Bank browser passed: admin add/edit/delete, immutable code, company selection, viewer read-only, in-use deletion rejection; no JavaScript errors.\nPASS: bank browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "documents": {
+        "passed": true,
+        "output": "Documents browser smoke passed: failed-write recovery, retained text/levels, retry, per-person isolation, duplicate prevention and company context lock.\nPASS: documents browser workflow on extracted standalone desktop with standalone-only dependencies"
+      },
+      "select": {
+        "passed": true,
+        "output": "Select browser smoke passed: reference forms, Persian search, native compatibility, valid IDs, keyboard, dynamic options, disabled/readonly/reset, literal text, modal and mobile.\nPASS: select browser workflow on extracted standalone desktop with standalone-only dependencies"
+      }
+    }
+  },
+  "network": {
+    "platform": "linux",
+    "scope": "Extracted application using Linux development Python and verified HTTPS; Windows installer execution not tested.",
+    "validator_exit_code": 0,
+    "stop_command_exit_code": 0,
+    "server_exit_code": 0
+  },
+  "network_output": "Network 0.7 payload passed: verified HTTPS, 16 concurrent writes, admin-only consolidated planning, isolated company internal courses, protected historical holding courses, admin-only competency management, cross-company personnel planning, encrypted backup and roster/attachment/password/personal-document recovery, active-server protection."
+}

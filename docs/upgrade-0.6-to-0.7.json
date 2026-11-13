@@ -1,0 +1,343 @@
+{
+  "passed": true,
+  "old_version": "0.6",
+  "new_version": "0.7",
+  "checked_at_utc": "2026-10-15T22:49:22.812563+00:00",
+  "execution": "Separate Linux Python processes; seed exact extracted 0.6 payload through APIs, then open the same stopped database with 0.7.",
+  "limitation": "API/data upgrade validation; Windows installer execution is not covered.",
+  "all_existing_tables_nonempty": true,
+  "all_existing_table_rows_ids_and_blobs_unchanged": true,
+  "schema_tables_and_columns_unchanged": true,
+  "preserved_tables": {
+    "assessments": {
+      "columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "rows": 2,
+      "all_values_sha256": "9250e3e1d9af2a01b10a001a9eede3f5b418f6dc773a57a7b1f69a3f06a721b0"
+    },
+    "audit": {
+      "columns": [
+        "id",
+        "created",
+        "user_id",
+        "company_id",
+        "action",
+        "detail"
+      ],
+      "rows": 37,
+      "all_values_sha256": "f41cec44bcc4fd65bc2df460b0d70cd20807e272de56f00d8fac861edfd22b85"
+    },
+    "branding": {
+      "columns": [
+        "key",
+        "mime",
+        "content",
+        "icon",
+        "updated"
+      ],
+      "rows": 3,
+      "all_values_sha256": "a488012af1b23790ff73ac8df16c33395209bbdbe59a1c44030e67f6181e71d8"
+    },
+    "certificates": {
+      "columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "title",
+        "issuer",
+        "issued",
+        "expires",
+        "filename",
+        "mime",
+        "content",
+        "created"
+      ],
+      "rows": 2,
+      "all_values_sha256": "1e1e0d4ebc7bcca9d35c855e1cd6da4078e857dd70938549619d6cfd54030545"
+    },
+    "companies": {
+      "columns": [
+        "id",
+        "name"
+      ],
+      "rows": 6,
+      "all_values_sha256": "939a94284deaf851eadce78bc22d780952e5476770675908e1c4554b67c7734f"
+    },
+    "competency_links": {
+      "columns": [
+        "skill_id",
+        "code"
+      ],
+      "rows": 2,
+      "all_values_sha256": "e1b69314ca4c4321b5ef91f6e0ae51803cc013b49eb8ae42a33916ba12458365"
+    },
+    "course_participants": {
+      "columns": [
+        "course_id",
+        "employee_id"
+      ],
+      "rows": 2,
+      "all_values_sha256": "6ea441869a8e931ef733954790e4d75ef5564c48c0ed8871c8b6056fdab2497c"
+    },
+    "courses": {
+      "columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "title",
+        "date",
+        "instructor",
+        "hours",
+        "cost",
+        "status",
+        "calendar_scope"
+      ],
+      "rows": 4,
+      "all_values_sha256": "0e09b042e37fcc84aac69ee94103dca5fa5ee836e797ecfee2790d2b5845ef1f"
+    },
+    "employee_meta": {
+      "columns": [
+        "employee_id",
+        "company_id",
+        "source_job",
+        "mapping",
+        "assessment_status",
+        "assessor",
+        "assessment_date",
+        "evidence",
+        "hr_approved"
+      ],
+      "rows": 2,
+      "all_values_sha256": "737d96d011aa21cd4faddf221194f55aeb0891f448c29d14eb4498def3ac8341"
+    },
+    "employees": {
+      "columns": [
+        "id",
+        "company_id",
+        "code",
+        "name",
+        "department",
+        "job",
+        "passport_number"
+      ],
+      "rows": 2,
+      "all_values_sha256": "e86c2b7e52b8953e968fdfd2bac903f0d2e1357b3a4635b7492d6f1188b555ff"
+    },
+    "holding_catalog_state": {
+      "columns": [
+        "key",
+        "value"
+      ],
+      "rows": 1,
+      "all_values_sha256": "18f85d6f6d2973a5839d99599e7ba489117d08068f20ceffd36406fe0d04156f"
+    },
+    "holding_competencies": {
+      "columns": [
+        "code",
+        "title",
+        "category",
+        "importance",
+        "method",
+        "reference"
+      ],
+      "rows": 283,
+      "all_values_sha256": "e107700f8a7d8642c154338f9e9e4b92e85cdfa2247f55c0375867944e4b8f74"
+    },
+    "instructors": {
+      "columns": [
+        "id",
+        "company_id",
+        "name",
+        "specialty",
+        "organization",
+        "qualification",
+        "rate",
+        "contact"
+      ],
+      "rows": 2,
+      "all_values_sha256": "0416b264b79ef3348c0b4af84333c0854fa301f8d5766c0885ae9702c7886281"
+    },
+    "job_profiles": {
+      "columns": [
+        "id",
+        "company_id",
+        "job",
+        "department",
+        "purpose",
+        "supervisor",
+        "duties",
+        "authority",
+        "education",
+        "experience",
+        "legal",
+        "hse",
+        "equipment",
+        "revision",
+        "approved_by",
+        "document_number",
+        "definition",
+        "commitments",
+        "conditions",
+        "performance",
+        "contract_notes",
+        "effective_date",
+        "review_date"
+      ],
+      "rows": 2,
+      "all_values_sha256": "ea560bbb3050168ca8dc560ddd858de1e5d114b209d180c464e8ca095adeb287"
+    },
+    "login_attempts": {
+      "columns": [
+        "username",
+        "count",
+        "until"
+      ],
+      "rows": 1,
+      "all_values_sha256": "a06f980abcd881968ba6603bcd2ed4b49cdfc58d41bb9a92f891042e4bbfacfa"
+    },
+    "needs": {
+      "columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "department",
+        "reason",
+        "priority",
+        "year",
+        "status",
+        "decision"
+      ],
+      "rows": 2,
+      "all_values_sha256": "bc4df34f34ccc90af6b9e6167dae4e2398a3778dc2ad37b0e7dc65b2d07f1a2a"
+    },
+    "personal_documents": {
+      "columns": [
+        "employee_id",
+        "company_id",
+        "overrides",
+        "revision",
+        "updated"
+      ],
+      "rows": 2,
+      "all_values_sha256": "150ffc6998c5cb3e58ae3de9f095816d06eef1205e07da04181a6c46d1ca72e1"
+    },
+    "personal_requirements": {
+      "columns": [
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "rows": 2,
+      "all_values_sha256": "17ae261ae5cacf404d5f21709aea9704099bf73f7e749fbcbe0daeca98818527"
+    },
+    "records": {
+      "columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "level",
+        "score",
+        "reaction",
+        "behavior",
+        "result"
+      ],
+      "rows": 2,
+      "all_values_sha256": "da891ceef8fcd1a82cd5569f144315400a1252366a6567e4c4fbb8f09435f363"
+    },
+    "requirements": {
+      "columns": [
+        "id",
+        "company_id",
+        "job",
+        "skill_id",
+        "level"
+      ],
+      "rows": 2,
+      "all_values_sha256": "d22d4b34029b935a9804a8a7b0df46e8a234f0d5e1dfdc6efd54a1dd33665d93"
+    },
+    "skills": {
+      "columns": [
+        "id",
+        "company_id",
+        "code",
+        "title",
+        "category",
+        "importance"
+      ],
+      "rows": 2,
+      "all_values_sha256": "a9bed2f9845bce7e81c8acc87743b9354d7af44679f4323fb1edabadc5dadcc8"
+    },
+    "users": {
+      "columns": [
+        "id",
+        "username",
+        "password",
+        "role",
+        "company_id",
+        "active"
+      ],
+      "rows": 3,
+      "all_values_sha256": "8de76deda764aaacbc2a185c5458de0049dfd8f016a202d7637f7d43da161a3c"
+    }
+  },
+  "roles": {
+    "manager": {
+      "existing_login_preserved": true,
+      "holding_calendar_denied": true,
+      "own_internal_calendar_readable": true,
+      "historical_own_holding_references_readable": true,
+      "holding_course_writes_denied": true,
+      "other_company_internal_and_personnel_denied": true
+    },
+    "viewer": {
+      "existing_login_preserved": true,
+      "holding_calendar_denied": true,
+      "own_internal_calendar_readable": true,
+      "historical_own_holding_references_readable": true,
+      "holding_course_writes_denied": true,
+      "other_company_internal_and_personnel_denied": true
+    }
+  },
+  "checks": [
+    "all_table_values_compared_before_new_version_login_or_writes",
+    "all_old_passports_document_numbers_personal_overrides_requirements_and_scores_unchanged",
+    "cross_company_roster_and_holding_personnel_preserved_for_admin",
+    "admin_consolidated_calendar_and_both_company_scopes_preserved",
+    "company_holding_calendar_and_writes_denied_internal_calendar_preserved",
+    "certificate_and_holding_company_logo_bytes_preserved",
+    "existing_admin_manager_viewer_passwords_still_work",
+    "integrity_and_foreign_keys_clean_before_after_and_in_backup",
+    "post_upgrade_backup_contains_roster_and_attendance"
+  ],
+  "old_payload_manifest_sha256": "0e18ef9e05f7bfd243b876aa699c454b066b4c95bf74dbf501a47018002871d9",
+  "new_payload_manifest_sha256": "0d3ba1ce7b705921a6fb85d6363df68674a0b83f81313a0609c5f11b20bb0003",
+  "new_source_directory_name": "extracted-standalone-07",
+  "old_source_app_sha256": {
+    "app/__init__.py": "b638752ecef2c0502e5e3f4dcbf397098dcd59d9b50790f1b4e1a500a9791a9d",
+    "app/branding.py": "623a1abcf118ce1ee44a1d84664cfb3622b14e7db9303619b30b046e0ddfb5ea",
+    "app/catalog.py": "d64d7724484a95e832c255abbea9d9d627b01dfdefab8f5e52481f8fce11e1be",
+    "app/documents.py": "304c780273c51f969d6f5f8ecb3c04b0e8cacfd693ddcfa5e4eb3661fa063aa7",
+    "app/holding_planning.py": "ea8a5261360d6d8b44fdbbe1d89c8f7ed4d7f16dede7f3c52682101ef152830c",
+    "app/importer.py": "c082e16fd9cec4953ef66de1f50c311bcbe30f50228f4ddd987279e2dff121f1",
+    "app/professional.py": "b433c30f0fca6573962890bbaad83b47d85f7e44bf62b9c10dd39018024e82e0",
+    "app/training_calendar.py": "17e670620b7b68cd1dee7c1c969d49a1926e99c19caf956954678c952b2d945c"
+  },
+  "new_source_app_sha256": {
+    "app/__init__.py": "eb4f200a08afda73e41fb6dfdaea64d75bb51dbdbf9372e71766a7a43fab41b0",
+    "app/branding.py": "623a1abcf118ce1ee44a1d84664cfb3622b14e7db9303619b30b046e0ddfb5ea",
+    "app/catalog.py": "9df0987ae19213e7cffe0dbf514198185d5ee6037810789e677949468170f2d6",
+    "app/documents.py": "642403a89dac74b36e680fe60edc19d903667a461079bfff5cb849c5e73c236c",
+    "app/holding_planning.py": "5984c17573f7c52f3a3fe36ec1b06173f8b3f940caf2ddf8965d40a8426e0038",
+    "app/importer.py": "c082e16fd9cec4953ef66de1f50c311bcbe30f50228f4ddd987279e2dff121f1",
+    "app/professional.py": "90331a8ba3127fa87d53c13c904c2ce7ac21206035e6a70265fb50a39b5e5b8c",
+    "app/training_calendar.py": "a9401b768eb9ae78e4b177a8ea839d4b34dbb2261e8f85eeecce456492b90f36",
+    "app/validation.py": "518dbf74449ff78f2434bc104894c6b470c389699b76936948fd3ea638f74fbe"
+  }
+}

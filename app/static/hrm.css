@@ -1,0 +1,63 @@
+.hrm-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:20px 0; padding:3px; }
+.hrm-tabs button { margin:0; }
+.hrm-tabs [aria-selected=true] { background:var(--navy,#183550); color:#fff; }
+.hrm-intro h2 { margin-top:0; }
+.hrm-resource-help { padding:0 5px; }
+.hrm-toolbar { align-items:end; }
+.hrm-toolbar > label { flex:1 1 240px; max-width:430px; }
+.hrm-toolbar input { width:100%; }
+.hrm-row-actions { min-width:170px; }
+.hrm-row-actions button { margin:2px 0 2px 5px; }
+.hrm-module-cards { margin:24px 0; }
+.hrm-module-card { display:flex; flex-direction:column; align-items:flex-start; gap:9px; color:var(--ink,#19334e); text-align:right; background:#fff; cursor:pointer; }
+.hrm-module-card > span { font-size:24px; color:var(--navy,#183550); }
+.hrm-module-card small { font-weight:normal; color:var(--muted,#64748b); }
+.hrm-access-note { border-inline-start:4px solid #bb944b; }
+.hrm-access-note p { line-height:2; }
+.hrm-metrics { margin:20px 0; }
+#hrm-editor { width:940px; max-width:calc(100vw - 28px); }
+.hrm-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin:18px 0; align-items:start; }
+.hrm-fields label { min-width:0; margin:0; }
+.hrm-fields input,.hrm-fields textarea,.hrm-fields select { width:100%; min-width:0; }
+.hrm-wide { grid-column:1/-1; }
+.hrm-fields .help { display:block; margin-top:5px; font-weight:normal; line-height:1.8; }
+#hrm-editor fieldset { min-width:0; border:1px solid #dce5ef; border-radius:10px; padding:16px; margin:20px 0; }
+#hrm-editor legend { font-weight:700; padding:0 8px; }
+.hrm-scope-row { display:grid; grid-template-columns:minmax(160px,1fr) minmax(240px,2fr); gap:18px; padding:12px 0; border-bottom:1px solid #edf1f6; align-items:center; }
+.hrm-scope-row:last-child { border:0; }
+.hrm-scope-row label { margin:0; }
+.hrm-scope-row textarea { width:100%; }
+.hrm-permission-table input[type=checkbox] { width:20px; height:20px; }
+.hrm-permission-table th:not(:first-child),.hrm-permission-table td:not(:first-child) { text-align:center; }
+.hrm-confidential { display:inline-block; font-size:10px; color:#8d3540; border:1px solid #eacbd0; border-radius:5px; padding:1px 7px; margin-inline-start:8px; font-weight:normal; }
+#hrm-related-report { margin-top:24px; }
+#hrm-related-report summary { font-weight:700; cursor:pointer; }
+#hrm-editor [hidden] { display:none!important; }
+#hrm-editor input[dir=ltr] { text-align:left; }
+#hrm-import-preview ul { max-height:220px; overflow:auto; line-height:1.9; }
+@media(max-width:760px) {
+ .hrm-fields { grid-template-columns:minmax(0,1fr); gap:14px; }
+ .hrm-wide { grid-column:auto; }
+ .hrm-scope-row { grid-template-columns:minmax(0,1fr); gap:8px; }
+ #hrm-editor { padding:18px; }
+ .hrm-toolbar > label { max-width:none; flex-basis:100%; }
+ .hrm-toolbar > div { width:100%; }
+ .hrm-tabs { flex-wrap:nowrap; overflow-x:auto; max-width:100%; padding:3px 0 10px; }
+ .hrm-tabs button { flex:0 0 auto; }
+ .hrm-hero .orb { display:none; }
+ .hrm-hero h2 { font-size:21px; }
+}
+.hrm-filters { margin-bottom:20px; padding:18px; }
+.hrm-filter-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.hrm-filter-grid label { min-width:0; margin:0; }
+.hrm-filter-grid input,.hrm-filter-grid select { width:100%; min-width:0; }
+.hrm-filters .toolbar { margin:14px 0 0; }
+.hrm-scope-row { grid-template-columns:repeat(3,minmax(0,1fr)) auto; align-items:end; gap:12px; }
+.hrm-scope-row input,.hrm-scope-row select { width:100%; min-width:0; }
+.hrm-scope-row button { margin:0; }
+.hrm-permission-table { min-width:650px; }
+.hrm-metrics .card strong { font-size:26px; }
+@media(max-width:1000px){.hrm-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hrm-scope-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.hrm-filter-grid,.hrm-scope-row{grid-template-columns:minmax(0,1fr)}.hrm-filters{padding:14px}.hrm-toolbar>div{display:flex;flex-wrap:wrap;gap:6px}.hrm-row-actions{min-width:120px}.hrm-permission-table input[type=checkbox]{width:22px;height:22px}}
+.hrm-archive-filter { margin:14px 0; }
+.hrm-archive-filter input { width:auto; }

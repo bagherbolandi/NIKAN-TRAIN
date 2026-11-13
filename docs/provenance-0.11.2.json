@@ -1,0 +1,11 @@
+{
+  "version": "0.11.2",
+  "source_repository": "https://github.com/bagherbolandi/NIKAN-TRAIN",
+  "observed_main_commit": "248728d49c2c9577a1646667fe718df890320d07",
+  "original_desktop_installer_blob": "b919186ad7cbaad7c4310fa07cb9ab3b41b76fad",
+  "base": "Python source recovered from byte-identical local desktop installer",
+  "server": "New Windows Server launcher built from shared recovered application; previous network installer not inspected",
+  "date": "2026-11-11",
+  "installer_fix": "Preflight checks active installation processes and locked files before replacement",
+  "password_recovery": "Locally issued, hashed, one-use 30-minute recovery codes with session revocation"
+}

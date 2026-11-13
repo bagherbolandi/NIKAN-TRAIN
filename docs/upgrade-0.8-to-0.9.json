@@ -1,0 +1,457 @@
+{
+  "passed": true,
+  "old_version": "0.8",
+  "new_version": "0.9",
+  "checked_at_utc": "2026-10-16T11:02:55.865339+00:00",
+  "execution": "Separate Linux Python processes seed the extracted 0.8 application, open the stopped original database with extracted 0.9, then restart independently; encrypted recovery uses extracted 0.9 network code.",
+  "limitation": "API/data upgrade and extracted Python payload validation; the Windows installer is not executed here.",
+  "original_nonempty_tables": 23,
+  "resulting_tables": 23,
+  "table_counts_unchanged_during_startup": true,
+  "all_original_columns_rows_ids_credentials_and_blobs_preserved_except_authorized_generated_reference_conversion": true,
+  "preserved_original_projection_fingerprints": {
+    "assessments": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "9250e3e1d9af2a01b10a001a9eede3f5b418f6dc773a57a7b1f69a3f06a721b0",
+      "verified_projection_sha256": "9250e3e1d9af2a01b10a001a9eede3f5b418f6dc773a57a7b1f69a3f06a721b0",
+      "added_columns": []
+    },
+    "audit": {
+      "rows": 38,
+      "original_columns": [
+        "id",
+        "created",
+        "user_id",
+        "company_id",
+        "action",
+        "detail"
+      ],
+      "original_projection_sha256": "1cd1b6047bcc9e79cdcb4773d232e615d2ab0db02073f3954c6264a29c3fe4e7",
+      "verified_projection_sha256": "1cd1b6047bcc9e79cdcb4773d232e615d2ab0db02073f3954c6264a29c3fe4e7",
+      "added_columns": []
+    },
+    "branding": {
+      "rows": 3,
+      "original_columns": [
+        "key",
+        "mime",
+        "content",
+        "icon",
+        "updated"
+      ],
+      "original_projection_sha256": "da9435e7bf977824590a76ae5fad3f11ee145a3a7f40054df24127d28e298754",
+      "verified_projection_sha256": "da9435e7bf977824590a76ae5fad3f11ee145a3a7f40054df24127d28e298754",
+      "added_columns": []
+    },
+    "certificates": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "title",
+        "issuer",
+        "issued",
+        "expires",
+        "filename",
+        "mime",
+        "content",
+        "created"
+      ],
+      "original_projection_sha256": "df5b4f0712a4a51c71c8d967f750bda10dc265154a8b4de9de58b2e9b7344a82",
+      "verified_projection_sha256": "df5b4f0712a4a51c71c8d967f750bda10dc265154a8b4de9de58b2e9b7344a82",
+      "added_columns": []
+    },
+    "companies": {
+      "rows": 6,
+      "original_columns": [
+        "id",
+        "name"
+      ],
+      "original_projection_sha256": "939a94284deaf851eadce78bc22d780952e5476770675908e1c4554b67c7734f",
+      "verified_projection_sha256": "939a94284deaf851eadce78bc22d780952e5476770675908e1c4554b67c7734f",
+      "added_columns": []
+    },
+    "company_registry": {
+      "rows": 1,
+      "original_columns": [
+        "id",
+        "high_watermark"
+      ],
+      "original_projection_sha256": "1a62a8d4c8474e54063f5c5867300c4183e5bcf98cf10051b7d9ceb1c1929b3b",
+      "verified_projection_sha256": "1a62a8d4c8474e54063f5c5867300c4183e5bcf98cf10051b7d9ceb1c1929b3b",
+      "added_columns": [
+        "passport_high_watermark"
+      ]
+    },
+    "competency_links": {
+      "rows": 2,
+      "original_columns": [
+        "skill_id",
+        "code"
+      ],
+      "original_projection_sha256": "e1b69314ca4c4321b5ef91f6e0ae51803cc013b49eb8ae42a33916ba12458365",
+      "verified_projection_sha256": "e1b69314ca4c4321b5ef91f6e0ae51803cc013b49eb8ae42a33916ba12458365",
+      "added_columns": []
+    },
+    "course_participants": {
+      "rows": 2,
+      "original_columns": [
+        "course_id",
+        "employee_id"
+      ],
+      "original_projection_sha256": "6ea441869a8e931ef733954790e4d75ef5564c48c0ed8871c8b6056fdab2497c",
+      "verified_projection_sha256": "6ea441869a8e931ef733954790e4d75ef5564c48c0ed8871c8b6056fdab2497c",
+      "added_columns": []
+    },
+    "courses": {
+      "rows": 4,
+      "original_columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "title",
+        "date",
+        "instructor",
+        "hours",
+        "cost",
+        "status",
+        "calendar_scope"
+      ],
+      "original_projection_sha256": "0e09b042e37fcc84aac69ee94103dca5fa5ee836e797ecfee2790d2b5845ef1f",
+      "verified_projection_sha256": "0e09b042e37fcc84aac69ee94103dca5fa5ee836e797ecfee2790d2b5845ef1f",
+      "added_columns": [
+        "external_code"
+      ]
+    },
+    "employee_meta": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "company_id",
+        "source_job",
+        "mapping",
+        "assessment_status",
+        "assessor",
+        "assessment_date",
+        "evidence",
+        "hr_approved"
+      ],
+      "original_projection_sha256": "737d96d011aa21cd4faddf221194f55aeb0891f448c29d14eb4498def3ac8341",
+      "verified_projection_sha256": "737d96d011aa21cd4faddf221194f55aeb0891f448c29d14eb4498def3ac8341",
+      "added_columns": []
+    },
+    "employees": {
+      "rows": 3,
+      "original_columns": [
+        "id",
+        "company_id",
+        "code",
+        "name",
+        "department",
+        "job",
+        "passport_number"
+      ],
+      "original_projection_sha256": "cad150c1a22a17bd224c0aa4a287bd4a602cd9c486f9be610223904df80ae374",
+      "verified_projection_sha256": "cad150c1a22a17bd224c0aa4a287bd4a602cd9c486f9be610223904df80ae374",
+      "added_columns": [
+        "passport_legacy_number"
+      ]
+    },
+    "holding_catalog_state": {
+      "rows": 1,
+      "original_columns": [
+        "key",
+        "value"
+      ],
+      "original_projection_sha256": "18f85d6f6d2973a5839d99599e7ba489117d08068f20ceffd36406fe0d04156f",
+      "verified_projection_sha256": "18f85d6f6d2973a5839d99599e7ba489117d08068f20ceffd36406fe0d04156f",
+      "added_columns": []
+    },
+    "holding_competencies": {
+      "rows": 283,
+      "original_columns": [
+        "code",
+        "title",
+        "category",
+        "importance",
+        "method",
+        "reference"
+      ],
+      "original_projection_sha256": "e107700f8a7d8642c154338f9e9e4b92e85cdfa2247f55c0375867944e4b8f74",
+      "verified_projection_sha256": "e107700f8a7d8642c154338f9e9e4b92e85cdfa2247f55c0375867944e4b8f74",
+      "added_columns": []
+    },
+    "instructors": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "name",
+        "specialty",
+        "organization",
+        "qualification",
+        "rate",
+        "contact"
+      ],
+      "original_projection_sha256": "0416b264b79ef3348c0b4af84333c0854fa301f8d5766c0885ae9702c7886281",
+      "verified_projection_sha256": "0416b264b79ef3348c0b4af84333c0854fa301f8d5766c0885ae9702c7886281",
+      "added_columns": []
+    },
+    "job_profiles": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "job",
+        "department",
+        "purpose",
+        "supervisor",
+        "duties",
+        "authority",
+        "education",
+        "experience",
+        "legal",
+        "hse",
+        "equipment",
+        "revision",
+        "approved_by",
+        "document_number",
+        "definition",
+        "commitments",
+        "conditions",
+        "performance",
+        "contract_notes",
+        "effective_date",
+        "review_date"
+      ],
+      "original_projection_sha256": "39091203fe75f204e58b76d08c5e7282407c629ab91c3d0b20b2299061171a40",
+      "verified_projection_sha256": "39091203fe75f204e58b76d08c5e7282407c629ab91c3d0b20b2299061171a40",
+      "added_columns": []
+    },
+    "login_attempts": {
+      "rows": 1,
+      "original_columns": [
+        "username",
+        "count",
+        "until"
+      ],
+      "original_projection_sha256": "232069999b1145df35e19bf44dd32278906ec944dae31c3603296c88d9bb432e",
+      "verified_projection_sha256": "232069999b1145df35e19bf44dd32278906ec944dae31c3603296c88d9bb432e",
+      "added_columns": []
+    },
+    "needs": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "department",
+        "reason",
+        "priority",
+        "year",
+        "status",
+        "decision"
+      ],
+      "original_projection_sha256": "bc4df34f34ccc90af6b9e6167dae4e2398a3778dc2ad37b0e7dc65b2d07f1a2a",
+      "verified_projection_sha256": "bc4df34f34ccc90af6b9e6167dae4e2398a3778dc2ad37b0e7dc65b2d07f1a2a",
+      "added_columns": []
+    },
+    "personal_documents": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "company_id",
+        "overrides",
+        "revision",
+        "updated"
+      ],
+      "original_projection_sha256": "7f0e97a79aced18dcbf448a3daa78ca3b2e0ced78fec41231a4581bba503e808",
+      "verified_projection_sha256": "7f0e97a79aced18dcbf448a3daa78ca3b2e0ced78fec41231a4581bba503e808",
+      "added_columns": [
+        "is_snapshot"
+      ]
+    },
+    "personal_requirements": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "17ae261ae5cacf404d5f21709aea9704099bf73f7e749fbcbe0daeca98818527",
+      "verified_projection_sha256": "17ae261ae5cacf404d5f21709aea9704099bf73f7e749fbcbe0daeca98818527",
+      "added_columns": []
+    },
+    "records": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "level",
+        "score",
+        "reaction",
+        "behavior",
+        "result"
+      ],
+      "original_projection_sha256": "da891ceef8fcd1a82cd5569f144315400a1252366a6567e4c4fbb8f09435f363",
+      "verified_projection_sha256": "da891ceef8fcd1a82cd5569f144315400a1252366a6567e4c4fbb8f09435f363",
+      "added_columns": []
+    },
+    "requirements": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "job",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "d22d4b34029b935a9804a8a7b0df46e8a234f0d5e1dfdc6efd54a1dd33665d93",
+      "verified_projection_sha256": "d22d4b34029b935a9804a8a7b0df46e8a234f0d5e1dfdc6efd54a1dd33665d93",
+      "added_columns": []
+    },
+    "skills": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "code",
+        "title",
+        "category",
+        "importance"
+      ],
+      "original_projection_sha256": "a9bed2f9845bce7e81c8acc87743b9354d7af44679f4323fb1edabadc5dadcc8",
+      "verified_projection_sha256": "a9bed2f9845bce7e81c8acc87743b9354d7af44679f4323fb1edabadc5dadcc8",
+      "added_columns": []
+    },
+    "users": {
+      "rows": 3,
+      "original_columns": [
+        "id",
+        "username",
+        "password",
+        "role",
+        "company_id",
+        "active"
+      ],
+      "original_projection_sha256": "5dd45086ac97ac57a46852f8f261d06d67fa6ef37a1062e7d070c15355754f1f",
+      "verified_projection_sha256": "5dd45086ac97ac57a46852f8f261d06d67fa6ef37a1062e7d070c15355754f1f",
+      "added_columns": []
+    }
+  },
+  "generated_reference_conversion": [
+    {
+      "employee_id": 1,
+      "old_reference_sha256": "19ec77e8df3d7b6f91fcbfc67551e268b953c124321898169aa5447f3034dca7",
+      "new_reference_sha256": "d6507a2ca400fde16d6085967a5099ec1892ba06a4102d9c7110112ae8f66436",
+      "exact_old_reference_preserved_as_alias": true
+    },
+    {
+      "employee_id": 2,
+      "old_reference_sha256": "54ba76129881dba242c96594bb40ecb01cf3972a05487bb0be832b33cf99076d",
+      "new_reference_sha256": "ab4cd08997c395308faef8bf1c10ff425d6ffc094719f2da8556ea74d67bb0cd",
+      "exact_old_reference_preserved_as_alias": true
+    }
+  ],
+  "custom_references": [
+    {
+      "employee_id": 3,
+      "reference_sha256": "7f5307987044cd748ab737ba16ddbfc85e0c14ce2cf0021799117ea8ac85e561",
+      "unchanged": true
+    }
+  ],
+  "only_added_columns": {
+    "company_registry": [
+      "passport_high_watermark"
+    ],
+    "courses": [
+      "external_code"
+    ],
+    "employees": [
+      "passport_legacy_number"
+    ],
+    "personal_documents": [
+      "is_snapshot"
+    ]
+  },
+  "new_course_external_codes_valid_unique_and_stable": true,
+  "legacy_personal_rows_preserve_original_json_revision_timestamp_and_start_as_review_required": true,
+  "explicit_personal_save_freezes_all_18_actual_fields": true,
+  "later_edits_to_all_18_ideal_job_fields_do_not_change_saved_actual_profile": true,
+  "full_personal_profile_ideal_profile_and_commitment_exports_are_read_only_before_and_after_save": true,
+  "export_response_types": {
+    "commitment": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    "commitment.docx": {
+      "status": 200,
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    },
+    "profile.docx": {
+      "status": 200,
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "company_role_scope_and_cross_company_roster_preserved": true,
+  "restart_and_sqlite_backup": {
+    "passed": true,
+    "short_numbers_and_exact_legacy_aliases_stable_after_fresh_process": true,
+    "full_18_field_actual_snapshot_stable_after_restart_and_sqlite_restore": true,
+    "retired_number_not_reused_after_restart_or_restore": true,
+    "sqlite_backup_restore_preserves_all_current_number_alias_pairs": true,
+    "new_course_external_codes_stable_after_restart_and_restore": true,
+    "retired_serial": 4,
+    "new_serial_after_restart": 5,
+    "new_serial_after_restore": 6
+  },
+  "authenticated_08_encrypted_backup_recovery": {
+    "verified": true,
+    "original_23_table_counts_unchanged": true,
+    "original_column_projection_and_generated_alias_migration_identical": true,
+    "pre_upgrade_review_required_status_preserved": true,
+    "archive_sha256": "24f0ebfb5b2eb0f574809e773634b7b0c5ff36b2ff37b7f79926c630aae60d14"
+  },
+  "standalone_and_network_python_application_sources_identical": true,
+  "old_payload_manifest_sha256": "fc593e99b38e220d569b9c7f684952bf6a0146ce8172edf19b658982193243a0",
+  "new_standalone_payload_manifest_sha256": "84afa8c6387628fea4210905dc7ce31a36ae68194c339ad9f309659984002c2a",
+  "new_network_payload_manifest_sha256": "f1767f05f1db57759beca2af5d9b7215852363a1e5ce214942e029d34e917045",
+  "old_source_app_sha256": {
+    "app/__init__.py": "05ef4634210a14003b35b088b7dc979cc95e7e70add6ae20c3b26c52dce5347d",
+    "app/branding.py": "d721564a18e3ed21ffe8aaf510a9ce6cadfebfedc4b348ff27b87e31628d4b23",
+    "app/catalog.py": "9df0987ae19213e7cffe0dbf514198185d5ee6037810789e677949468170f2d6",
+    "app/companies.py": "9e20cde06e875e49d988fb3240cb5bd9e47999c18398138527517e406ceb0e4f",
+    "app/documents.py": "642403a89dac74b36e680fe60edc19d903667a461079bfff5cb849c5e73c236c",
+    "app/holding_planning.py": "5984c17573f7c52f3a3fe36ec1b06173f8b3f940caf2ddf8965d40a8426e0038",
+    "app/importer.py": "c082e16fd9cec4953ef66de1f50c311bcbe30f50228f4ddd987279e2dff121f1",
+    "app/professional.py": "90331a8ba3127fa87d53c13c904c2ce7ac21206035e6a70265fb50a39b5e5b8c",
+    "app/training_calendar.py": "a9401b768eb9ae78e4b177a8ea839d4b34dbb2261e8f85eeecce456492b90f36",
+    "app/validation.py": "518dbf74449ff78f2434bc104894c6b470c389699b76936948fd3ea638f74fbe"
+  },
+  "new_source_app_sha256": {
+    "app/__init__.py": "50b855123207cd943e295d1481690de6d353871e0c628bd4ae9a63512e8de32f",
+    "app/branding.py": "d721564a18e3ed21ffe8aaf510a9ce6cadfebfedc4b348ff27b87e31628d4b23",
+    "app/catalog.py": "9df0987ae19213e7cffe0dbf514198185d5ee6037810789e677949468170f2d6",
+    "app/commitments.py": "1877a52a020bd7c659da1782a844a3bbd4fa14c3d88fd2ea7e2ae45bbbb7a30b",
+    "app/companies.py": "9e20cde06e875e49d988fb3240cb5bd9e47999c18398138527517e406ceb0e4f",
+    "app/documents.py": "7dc8449b3b859104e0e916c7597c804091a22e36b7115dffc3050c6720e32794",
+    "app/excel_forms.py": "4264c7dc8c1157fbf422f0db4b83aa978e7f80fd3b4648026fab9aefe62bb279",
+    "app/excel_workbooks.py": "26cfa58774a95bdc6e12377514cdfa33a52255c855714db4a51c5e9bf020f834",
+    "app/holding_planning.py": "5984c17573f7c52f3a3fe36ec1b06173f8b3f940caf2ddf8965d40a8426e0038",
+    "app/importer.py": "c082e16fd9cec4953ef66de1f50c311bcbe30f50228f4ddd987279e2dff121f1",
+    "app/professional.py": "90331a8ba3127fa87d53c13c904c2ce7ac21206035e6a70265fb50a39b5e5b8c",
+    "app/training_calendar.py": "a9401b768eb9ae78e4b177a8ea839d4b34dbb2261e8f85eeecce456492b90f36",
+    "app/validation.py": "518dbf74449ff78f2434bc104894c6b470c389699b76936948fd3ea638f74fbe"
+  }
+}

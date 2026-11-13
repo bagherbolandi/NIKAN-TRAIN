@@ -1,0 +1,148 @@
+{
+  "passed": true,
+  "checked_at_utc": "2026-10-15T17:30:42.379610+00:00",
+  "old_source_commit": "1711185e804084e89b3bbe74711560d53789778e",
+  "old_app_tree": "7e149a6888c4834f090f48c4c15f461b0aeed6d9",
+  "execution": "separate Python processes; exact old source API seeds stopped directory; current source opens same directory",
+  "platform": "Linux Python API migration validation; Windows installer execution not covered",
+  "preserved_original_tables": {
+    "assessments": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "9250e3e1d9af2a01b10a001a9eede3f5b418f6dc773a57a7b1f69a3f06a721b0"
+    },
+    "audit": {
+      "rows": 29,
+      "original_columns_unchanged": true,
+      "sha256": "263be88f534ece277bec0cec6d9f5e9b95a3919fc6bd8de371ba68789290fd09"
+    },
+    "branding": {
+      "rows": 3,
+      "original_columns_unchanged": true,
+      "sha256": "ea3b097fb0bd45f7265b5b7c501b445cc063f8f2233f85680f720b66d06c18c5"
+    },
+    "certificates": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "448d9ba74f70242c5c4da9524d9357a94ef12ba89e83886976642b39dfd30971"
+    },
+    "companies": {
+      "rows": 6,
+      "original_columns_unchanged": true,
+      "sha256": "939a94284deaf851eadce78bc22d780952e5476770675908e1c4554b67c7734f"
+    },
+    "competency_links": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "17bf541984f629f4fba57af0cbe24c028ffe383b1739934d473fa7b0a8b19a4e"
+    },
+    "courses": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "1dbe34791f519c9b86d2d4b14008adb85cd1dd2f2dce08b76757a6fd74b1d22e"
+    },
+    "employee_meta": {
+      "rows": 0,
+      "original_columns_unchanged": true,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "employees": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "6906ea22f0a4dcb5e7703dd187e8ff283a2530953e86490747524bfa39d4742c"
+    },
+    "holding_competencies": {
+      "rows": 283,
+      "original_columns_unchanged": true,
+      "sha256": "deffa4b1d843608c2e144543d56441a5e9157fb6dac6e9e9020fb9dc34ac6c1c"
+    },
+    "instructors": {
+      "rows": 0,
+      "original_columns_unchanged": true,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "job_profiles": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "2ad9e612de7b797ba269418e9c36cd010ae62d4232baa7b446d337c9468b132a"
+    },
+    "login_attempts": {
+      "rows": 0,
+      "original_columns_unchanged": true,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "needs": {
+      "rows": 0,
+      "original_columns_unchanged": true,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "personal_documents": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "a7f8b00c24b035620ae64f086cae09393687890eb0fc9fa1764f97a1bfa875e5"
+    },
+    "personal_requirements": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "17ae261ae5cacf404d5f21709aea9704099bf73f7e749fbcbe0daeca98818527"
+    },
+    "records": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "f169294ee45d374b66c1c87e16ce035c5a5e5f965be8e140f4facce3ee6e6ca7"
+    },
+    "requirements": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "6b1164c93f510e7e04a8a4839188b7f0067a432b6aaa22d32fc5a272e54f8227"
+    },
+    "skills": {
+      "rows": 2,
+      "original_columns_unchanged": true,
+      "sha256": "9c6a24f8b2f5f87ae62357a150b12916af6d9819af77e6c5cf207ec9839905b6"
+    },
+    "users": {
+      "rows": 3,
+      "original_columns_unchanged": true,
+      "sha256": "d82396da7af94057283ef110ae159614804efa81fd1ff3ca2b454765db552891"
+    }
+  },
+  "checks": [
+    "all_original_table_rows_and_ids_preserved_by_fingerprint",
+    "legacy_courses_default_to_holding_calendar",
+    "new_planning_table_starts_empty",
+    "legacy_passports_document_numbers_personal_overrides_and_requirements_unchanged",
+    "legacy_assessments_records_scores_certificates_and_logo_bytes_unchanged",
+    "holding_calendar_consolidates_both_legacy_companies",
+    "holding_admin_sees_both_legacy_employee_names",
+    "new_joint_course_stores_two_company_roster_without_creating_attendance",
+    "legacy_admin_manager_viewer_logins_preserved_with_new_permissions",
+    "company_manager_can_select_existing_bank_competency_without_mutating_bank",
+    "repeated_startup_keeps_joint_roster",
+    "post_upgrade_sqlite_backup_preserves_joint_roster_and_historical_data",
+    "integrity_and_foreign_keys_pass_before_and_after_upgrade"
+  ],
+  "historical_counts": {
+    "companies": 6,
+    "users": 3,
+    "employees": 2,
+    "courses": 2,
+    "records": 2,
+    "assessments": 2,
+    "personal_documents": 2,
+    "personal_requirements": 2,
+    "certificates": 2,
+    "branding": 3
+  },
+  "new_participant_count": 2,
+  "current_source_sha256": {
+    "app/__init__.py": "b638752ecef2c0502e5e3f4dcbf397098dcd59d9b50790f1b4e1a500a9791a9d",
+    "app/branding.py": "623a1abcf118ce1ee44a1d84664cfb3622b14e7db9303619b30b046e0ddfb5ea",
+    "app/catalog.py": "d64d7724484a95e832c255abbea9d9d627b01dfdefab8f5e52481f8fce11e1be",
+    "app/documents.py": "304c780273c51f969d6f5f8ecb3c04b0e8cacfd693ddcfa5e4eb3661fa063aa7",
+    "app/holding_planning.py": "ea8a5261360d6d8b44fdbbe1d89c8f7ed4d7f16dede7f3c52682101ef152830c",
+    "app/importer.py": "c082e16fd9cec4953ef66de1f50c311bcbe30f50228f4ddd987279e2dff121f1",
+    "app/professional.py": "b433c30f0fca6573962890bbaad83b47d85f7e44bf62b9c10dd39018024e82e0",
+    "app/training_calendar.py": "17e670620b7b68cd1dee7c1c969d49a1926e99c19caf956954678c952b2d945c"
+  }
+}

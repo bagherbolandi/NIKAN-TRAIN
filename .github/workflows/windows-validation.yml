@@ -1,0 +1,154 @@
+name: Windows installer validation
+on:
+  push:
+    branches: [main, holding-calendar-competency-access, nikan-hrm]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clear reports from previous releases
+        shell: pwsh
+        run: |
+          Remove-Item docs/windows-*-result.json,docs/windows-validation-summary.json,docs/windows-pytest.xml,windows-pytest.xml -ErrorAction SilentlyContinue
+      - name: Detect committed offline installers
+        id: installers
+        shell: pwsh
+        run: |
+          $required = @('NikanHRM-Test-Setup.exe', 'NikanHRM-Server-Setup.exe', 'NikanTraining-Network-Client-Setup.exe')
+          $missing = @($required | ForEach-Object { $_; "$_.sha256" } | Where-Object { !(Test-Path "distribution/$_") })
+          $ready = $missing.Count -eq 0
+          "ready=$($ready.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "missing=$($missing -join ', ')" >> $env:GITHUB_OUTPUT
+          if (!$ready) { Write-Host "Native installers unavailable in this source commit: $($missing -join ', ')" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install source test dependencies
+        id: dependencies
+        run: python -m pip install -r requirements-network.txt pytest==8.4.2
+      - name: API and workbook tests
+        id: pytest
+        run: python -m pytest -q --junitxml=docs/windows-pytest.xml
+      - name: Verify isolated test install, upgrade, close and uninstall
+        id: standalone
+        if: always() && steps.installers.outputs.ready == 'true'
+        shell: pwsh
+        run: ./packaging/windows_installer_smoke.ps1
+      - name: Verify server, clients, HRM and encrypted recovery
+        id: network
+        if: always() && steps.installers.outputs.ready == 'true'
+        shell: pwsh
+        run: ./packaging/windows_network_smoke.ps1
+      - name: Record source-linked native results and test counts
+        id: summary
+        if: always()
+        shell: pwsh
+        env:
+          PRIOR_JOB_STATUS: ${{ job.status }}
+          INSTALLERS_READY: ${{ steps.installers.outputs.ready }}
+          INSTALLERS_MISSING: ${{ steps.installers.outputs.missing }}
+          PYTEST_OUTCOME: ${{ steps.pytest.outcome }}
+          STANDALONE_OUTCOME: ${{ steps.standalone.outcome }}
+          NETWORK_OUTCOME: ${{ steps.network.outcome }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force docs | Out-Null
+          $counts = [ordered]@{ total = 0; passed = 0; failures = 0; errors = 0; skipped = 0 }
+          if (Test-Path docs/windows-pytest.xml) {
+            [xml]$xml = Get-Content docs/windows-pytest.xml -Raw
+            foreach ($suite in @($xml.SelectNodes('//testsuite'))) {
+              $counts.total += [int]$suite.tests
+              $counts.failures += [int]$suite.failures
+              $counts.errors += [int]$suite.errors
+              $counts.skipped += [int]$suite.skipped
+            }
+            $counts.passed = $counts.total - $counts.failures - $counts.errors - $counts.skipped
+          }
+          function Read-Report([string]$Path) {
+            if (Test-Path $Path) { return Get-Content $Path -Raw | ConvertFrom-Json }
+            return $null
+          }
+          $standalone = Read-Report 'docs/windows-installer-result.json'
+          $network = Read-Report 'docs/windows-network-result.json'
+          $standaloneHrm = Read-Report 'docs/windows-installer-hrm-result.json'
+          $networkHrm = Read-Report 'docs/windows-network-hrm-result.json'
+          $attempted = $env:INSTALLERS_READY -eq 'true' -and ($env:STANDALONE_OUTCOME -in @('success', 'failure') -or $env:NETWORK_OUTCOME -in @('success', 'failure'))
+          $nativePassed = $attempted -and $env:STANDALONE_OUTCOME -eq 'success' -and $env:NETWORK_OUTCOME -eq 'success' -and $standalone.status -eq 'passed' -and $network.status -eq 'passed' -and $standalone.native_windows_execution -eq $true -and $network.native_windows_execution -eq $true -and $standaloneHrm.passed -eq $true -and $networkHrm.passed -eq $true -and $standaloneHrm.native_windows_execution -eq $true -and $networkHrm.native_windows_execution -eq $true
+          $passed = $nativePassed -and $env:PYTEST_OUTCOME -eq 'success' -and $counts.total -gt 0 -and $counts.failures -eq 0 -and $counts.errors -eq 0 -and $env:PRIOR_JOB_STATUS -eq 'success'
+          $validationRequired = $env:INSTALLERS_READY -eq 'true' -or $env:GITHUB_REF -like 'refs/tags/v*'
+          $overallJobStatus = if ($validationRequired -and !$passed) { 'failure' } else { $env:PRIOR_JOB_STATUS }
+          $status = if ($passed) { 'passed' } elseif (!$validationRequired -and !$attempted -and $env:PRIOR_JOB_STATUS -eq 'success') { 'not_run' } else { 'failed' }
+          $summary = [ordered]@{
+            source_sha = $env:GITHUB_SHA; source_ref = $env:GITHUB_REF; run_id = $env:GITHUB_RUN_ID; run_attempt = $env:GITHUB_RUN_ATTEMPT
+            run_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            status = $status; overall_job_status = $overallJobStatus
+            native_attempted = $attempted; native_passed = $nativePassed; missing_installers = $env:INSTALLERS_MISSING
+            test_counts = $counts
+            steps = @{ pytest = $env:PYTEST_OUTCOME; standalone = $env:STANDALONE_OUTCOME; network = $env:NETWORK_OUTCOME }
+            native = @{ standalone = $standalone; network = $network; standalone_hrm = $standaloneHrm; network_hrm = $networkHrm }
+          }
+          $summary | ConvertTo-Json -Depth 12 | Set-Content docs/windows-validation-summary.json -Encoding utf8
+          "Windows validation: $status; native attempted: $attempted; source tests: $($counts.passed)/$($counts.total) passed" >> $env:GITHUB_STEP_SUMMARY
+          "Report branch: validation/windows-$env:GITHUB_SHA-$env:GITHUB_RUN_ID" >> $env:GITHUB_STEP_SUMMARY
+          "passed=$($passed.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NikanHRM-Windows-Validation-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            docs/windows-pytest.xml
+            docs/windows-*-result.json
+            docs/windows-validation-summary.json
+      - name: Publish immutable validation evidence branch
+        if: always()
+        shell: pwsh
+        env:
+          PUBLISH_JOB_STATUS: ${{ job.status }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $summaryPath = 'docs/windows-validation-summary.json'
+          if (Test-Path $summaryPath) {
+            $current = Get-Content $summaryPath -Raw | ConvertFrom-Json
+            if ($env:PUBLISH_JOB_STATUS -ne 'success') { $current.overall_job_status = $env:PUBLISH_JOB_STATUS; $current.status = 'failed' }
+            $current | ConvertTo-Json -Depth 12 | Set-Content $summaryPath -Encoding utf8
+          }
+          $branch = "validation/windows-$env:GITHUB_SHA-$env:GITHUB_RUN_ID"
+          $existing = & git ls-remote --heads origin "refs/heads/$branch"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check immutable validation report branch' }
+          if ($existing) { throw "Report branch already exists and will never be changed: $branch. This is run attempt $env:GITHUB_RUN_ATTEMPT; download this attempt's artifact or start a new run." }
+          git config user.name 'Nikan Windows validation'
+          git config user.email 'nikan-windows-validation@users.noreply.github.com'
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP ('nikan-validation-index-' + [guid]::NewGuid())
+          try {
+            git read-tree --empty
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create report-only index' }
+            $reports = @(Get-ChildItem docs -File | Where-Object { $_.Name -eq 'windows-pytest.xml' -or $_.Name -eq 'windows-validation-summary.json' -or $_.Name -like 'windows-*-result.json' })
+            if (!($reports | Where-Object Name -eq 'windows-validation-summary.json')) { throw 'No current-run summary exists; refusing to publish stale evidence' }
+            foreach ($report in $reports) {
+              if ($report.Length -gt 5MB) { throw "Validation report exceeds small-report limit: $($report.Name)" }
+              git add -f -- "docs/$($report.Name)"
+              if ($LASTEXITCODE -ne 0) { throw "Could not stage report: $($report.Name)" }
+            }
+            $tree = & git write-tree
+            if ($LASTEXITCODE -ne 0) { throw 'Could not write report-only tree' }
+            $reportCommit = & git commit-tree $tree -m "Windows validation for $env:GITHUB_SHA (run $env:GITHUB_RUN_ID)"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create report-only commit' }
+            git push origin "${reportCommit}:refs/heads/$branch"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not publish new immutable validation branch' }
+          } finally {
+            if (Test-Path $env:GIT_INDEX_FILE) { Remove-Item $env:GIT_INDEX_FILE -Force }
+            Remove-Item Env:GIT_INDEX_FILE
+          }
+      - name: Require complete native validation when installers are present or version tagged
+        if: always() && (steps.installers.outputs.ready == 'true' || startsWith(github.ref, 'refs/tags/v')) && steps.summary.outputs.passed != 'true'
+        shell: pwsh
+        run: throw 'Committed installers and version tags require matching source tests and both native installer validations to pass.'
