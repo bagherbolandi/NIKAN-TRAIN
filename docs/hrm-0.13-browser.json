@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "native_windows_execution": false,
+  "checks": [
+    "company/site create, rename and empty-only delete through real forms",
+    "current site roster separates temporary visitors and unassigned people; linked delete preserves staff",
+    "local personnel reader sees only assigned site and cannot change organization",
+    "real accord forms calculate 60/40 weighted score, participation and exact whole-rial award",
+    "closed-period review finalizes immutable result and exports the actual financial result to Excel",
+    "finalized accord remains stable after later source-score correction and rejects monetary edits",
+    "incomplete criteria stay explicit and block finalization without inventing a zero award",
+    "performance permission does not grant financial access; accord reader can view frozen result but cannot change it"
+  ],
+  "javascript_errors": [],
+  "mobile_horizontal_overflow": false
+}

@@ -4,7 +4,7 @@
  const modules = [
   ['personnel','♙','پرونده و ساختار پرسنلی'],['contracts','▤','قراردادها و کارگزینی'],
   ['documents','▱','مدارک پرونده'],['attendance','◷','حضور، مرخصی و مأموریت'],
-  ['performance','▥','ارزیابی عملکرد'],['discipline','≡','تشویق و سوابق انضباطی'],
+  ['performance','▥','ارزیابی عملکرد'],['productivity','◈','آکورد بهره‌وری'],['discipline','≡','تشویق و سوابق انضباطی'],
   ['loans','◇','وام‌ها و تسهیلات'],['welfare','▦','خدمات و سوابق رفاهی'],
   ['accommodation','⌂','اقامتگاه‌ها و رزروها'],['training','◎','سوابق آموزش کارکنان'],
   ['hse','✚','ایمنی و تجهیزات حفاظت فردی'],['health_environment','❋','بهداشت و محیط زیست'],
@@ -12,7 +12,7 @@
  const moduleLabels=Object.fromEntries(modules.map(([key,,title])=>[key,title]));
  Object.assign(moduleLabels,{'settings':'تنظیمات و دسترسی','reports':'گزارش‌ها','backup.full_export':'خروجی کامل پایگاه و کلید بازیابی','health':'جزئیات پزشکی محرمانه'});
  const roleLabels={system_admin:'ادمین اصلی هلدینگ',holding_manager:'مدیر هلدینگی',holding_hr:'منابع انسانی هلدینگ',company_hr:'منابع انسانی شرکت',unit_manager:'مدیر واحد',training_officer:'مسئول آموزش',hse_officer:'مسئول تخصصی ایمنی / بهداشت و محیط زیست',executive:'مدیریت ارشد',unassigned:'بدون نقش منابع انسانی'};
- const hrmPages=[['hrm_dashboard','◈','نمای کلی منابع انسانی'],...modules.map(([key,icon,title])=>['hrm_'+key,icon,title]),['hrm_reports','↧','گزارش‌های منابع انسانی'],['hrm_access','♧','کاربران و مجوزهای HRM']];
+ const hrmPages=[['hrm_dashboard','◈','نمای کلی منابع انسانی'],['hrm_structure','▣','شرکت‌ها، سایت‌ها و نفرات'],...modules.map(([key,icon,title])=>['hrm_'+key,icon,title]),['hrm_reports','↧','گزارش‌های منابع انسانی'],['hrm_access','♧','کاربران و مجوزهای HRM']];
  for(const entry of hrmPages){if(!menus.some(item=>item[0]===entry[0]))menus.push(entry);companyIndependentPages.add(entry[0]);}
  const context=()=>user?.hrm||{};
  const can=(module,operation='read')=>{
@@ -24,7 +24,7 @@
  const moduleAvailable=module=>['read','create','edit','delete','export'].some(operation=>can(module,operation))||(module==='health_environment'&&moduleAvailable('health'));
  const schemaCan=(schema,operation)=>schema['can_'+operation]===undefined?can(schema.module,operation):Boolean(schema['can_'+operation]);
  const dashboardSections=[['holding','تجمیعی هلدینگ'],['personnel','امور اداری و پرسنلی'],['training','آموزش و توسعه'],['hse','ایمنی'],['health_environment','بهداشت و محیط زیست']];
- let dashboardSection='';
+ let dashboardSection='',structureCompany=null,structureSite='';
  let filterOwner=null,filterCompany=null,activeFilters={};
  function resetFilters(){filterOwner=user;filterCompany=Number(cid);activeFilters={};}
  function ensureFilters(){if(filterOwner!==user||filterCompany!==Number(cid))resetFilters();}
@@ -67,25 +67,28 @@
   const parts=new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Tehran'}).formatToParts(parsed);
   return ['year','month','day'].map(type=>parts.find(part=>part.type===type)?.value).join('/');
  }
- function fieldLabel(schema,key){return schema?.fields?.find(field=>field.key===key)?.label||labels[key]||({employee_name:'نام فرد',employee_code:'کد پرسنلی',company_name:'شرکت',unit_name:'واحد',site_id:'سایت محل خدمت',site_name:'سایت',unit_id:'واحد تعریف‌شده',location:'محل فعالیت',due_date:'موعد پیگیری',exam_date:'تاریخ معاینه',fitness:'تناسب شغلی',contract_count:'تعداد قرارداد',employee_count:'تعداد کارکنان',version:'بازنگری',paid_rials:'جمع بازپرداخت (ریال)',outstanding_rials:'مانده (ریال)',repayment_status:'وضعیت بازپرداخت',renewal_count:'تعداد تمدید',days_remaining:'روز تا پایان',score_percent:'امتیاز عملکرد (درصد)',period_title:'دوره ارزیابی',total_records:'تعداد ثبت',work_minutes:'حضور (دقیقه)',leave_minutes:'مرخصی (دقیقه)',mission_minutes:'مأموریت (دقیقه)',absence_minutes:'غیبت (دقیقه)',late_minutes:'تأخیر (دقیقه)',overtime_minutes:'اضافه‌کاری (دقیقه)',review_required:'نیازمند بازنگری الزامات',ppe_review_required:'نیازمند بازنگری PPE',ppe_name:'تجهیز حفاظت فردی',missing_quantity:'کسری تعداد',next_due_date:'موعد تعویض',overdue:'نیازمند تعویض',reason:'علت پیگیری',target_site_id:'سایت فعالیت موقت',activity_location:'محل فعالیت واقعی',exam_type:'نوع معاینه',next_review_date:'موعد معاینه بعدی',employees:'تعداد کارکنان',contracts:'قراردادها',ppe_missing:'کسری تجهیزات حفاظت فردی',medical_due:'معاینات سررسیدشده',training_hours:'آموزش (ساعت)',actual_person_hours:'نفرساعت آموزش واقعی',competency_title:'عنوان شایستگی',current_level:'سطح فعلی',required_level:'سطح لازم',assessment_date:'تاریخ ارزیابی',record_date:'تاریخ سابقه آموزشی'}[key])||key;}
+ function fieldLabel(schema,key){return schema?.fields?.find(field=>field.key===key)?.label||labels[key]||({employee_name:'نام فرد',employee_code:'کد پرسنلی',company_name:'شرکت',unit_name:'واحد',site_id:'سایت محل خدمت',site_name:'سایت',unit_id:'واحد تعریف‌شده',location:'محل فعالیت',due_date:'موعد پیگیری',exam_date:'تاریخ معاینه',fitness:'تناسب شغلی',contract_count:'تعداد قرارداد',employee_count:'تعداد کارکنان',version:'بازنگری',paid_rials:'جمع بازپرداخت (ریال)',outstanding_rials:'مانده (ریال)',repayment_status:'وضعیت بازپرداخت',renewal_count:'تعداد تمدید',days_remaining:'روز تا پایان',score_percent:'امتیاز عملکرد (درصد)',period_title:'دوره ارزیابی',total_records:'تعداد ثبت',work_minutes:'حضور (دقیقه)',leave_minutes:'مرخصی (دقیقه)',mission_minutes:'مأموریت (دقیقه)',absence_minutes:'غیبت (دقیقه)',late_minutes:'تأخیر (دقیقه)',overtime_minutes:'اضافه‌کاری (دقیقه)',review_required:'نیازمند بازنگری الزامات',ppe_review_required:'نیازمند بازنگری PPE',ppe_name:'تجهیز حفاظت فردی',missing_quantity:'کسری تعداد',next_due_date:'موعد تعویض',overdue:'نیازمند تعویض',reason:'علت پیگیری',target_site_id:'سایت فعالیت موقت',activity_location:'محل فعالیت واقعی',exam_type:'نوع معاینه',next_review_date:'موعد معاینه بعدی',employees:'تعداد کارکنان',contracts:'قراردادها',ppe_missing:'کسری تجهیزات حفاظت فردی',medical_due:'معاینات سررسیدشده',training_hours:'آموزش (ساعت)',actual_person_hours:'نفرساعت آموزش واقعی',competency_title:'عنوان شایستگی',current_level:'سطح فعلی',required_level:'سطح لازم',assessment_date:'تاریخ ارزیابی',record_date:'تاریخ سابقه آموزشی',target_site_name:'سایت فعالیت موقت',completion_percent:'درصد تکمیل شاخص‌ها',participation_percent:'درصد مشارکت',accord_rials:'آکورد (ریال)',base_rials:'مبلغ مبنا (ریال)',budget_rials:'بودجه آکورد (ریال)',policy_title:'ضابطه آکورد',policy_status:'وضعیت ضابطه',calculated_at:'زمان محاسبه',method:'روش محاسبه',minimum_score:'حداقل امتیاز',scheduled_minutes:'دقایق مبنای دوره',actual_minutes:'دقایق مشارکت مؤثر'}[key])||key;}
  function choicesOf(field){
   const value=field.choices||field.options||[];
   return Array.isArray(value)?value.map(item=>Array.isArray(item)?item:[item.value??item.key??item,item.label??item.title??String(item)]):Object.entries(value);
  }
+ function accordLocked(key,row){return ['accord_policies','accord_entries'].includes(key)&&Boolean(row?.locked||row?.policy_status==='finalized'||(key==='accord_policies'&&row?.status==='finalized'));}
  function cellValue(schema,key,value,row){
   const field=schema?.fields?.find(item=>item.key===key),choices=field?choicesOf(field):[];
   if(value===null||value===undefined||value==='')return '—';
   if(field?.type==='date'||/^\d{4}-\d{2}-\d{2}$/.test(String(value)))return dateInput(value);
   const choice=choices.find(([code])=>String(code)===String(value));if(choice)return choice[1];
+  if(/_rials$/.test(key))return accordMoney(row?.[key+'_exact']??value);
   if(key==='employee_id')return row.employee_name||row.name||value;
   if(key==='site_id')return row.site_name||context().sites?.find(site=>Number(site.id)===Number(value))?.name||value;
   if(key==='unit_id')return row.unit_name||value;
   if(key==='company_id')return row.company_name||user.companies?.find(company=>Number(company.id)===Number(value))?.name||value;
   if(['review_required','ppe_review_required'].includes(key))return value?'نیازمند بازنگری':'—';
-  if(key==='status')return ({missing:'ثبت نشده',due:'سررسیدشده',recorded:'ثبت‌شده',pending:'در انتظار بررسی',open:'باز',closed:'بسته'})[value]||String(value);
+  if(key==='calculated_at'&&value){const stamp=new Date(String(value).replace(' ','T')+(String(value).endsWith('Z')?'':'Z'));if(!Number.isNaN(stamp.getTime()))return new Intl.DateTimeFormat('fa-IR',{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Tehran'}).format(stamp);}
+  if(key==='status'||key==='policy_status')return ({missing:'ثبت نشده',due:'سررسیدشده',recorded:'ثبت‌شده',pending:'در انتظار بررسی',open:'باز',closed:'بسته',draft:'پیش‌نویس',finalized:'نهایی‌شده',ready:'قابل بررسی',incomplete:'اطلاعات ناقص'})[value]||String(value);
   if(typeof value==='boolean')return value?'بله':'خیر';
   if(typeof value==='object')return JSON.stringify(value);
-  if(typeof value==='number')return value.toLocaleString('fa-IR');
+  if(typeof value==='number')return value.toLocaleString('fa-IR',{maximumFractionDigits:4});
   return String(value);
  }
  async function catalog(force=false){
@@ -114,7 +117,7 @@
   if(!managesAccess())document.querySelectorAll('#nav [data-page]').forEach(button=>{if(['users','companies','branding','backup','audit'].includes(button.dataset.page))button.remove()});
   document.querySelectorAll('#nav .nav-group').forEach(group=>{if(!group.querySelector('button'))group.remove()});
   if(available()){
-   const items=[hrmPages[0],...modules.filter(([key])=>moduleAvailable(key)).map(([key])=>hrmPages.find(item=>item[0]==='hrm_'+key))];
+   const items=[hrmPages[0],...(managesAccess()||can('personnel')?[hrmPages.find(item=>item[0]==='hrm_structure')]:[]),...modules.filter(([key])=>moduleAvailable(key)).map(([key])=>hrmPages.find(item=>item[0]==='hrm_'+key))];
    if(can('reports')||Object.values(context().permissions||{}).some(flags=>flags.export))items.push(hrmPages.find(item=>item[0]==='hrm_reports'));
    const section=document.createElement('section');section.className='nav-group hrm-nav';
    section.innerHTML='<h2 class="nav-group-title">مدیریت منابع انسانی</h2>'+items.map(([key,icon,title])=>`<button data-page="${key}"><span aria-hidden="true">${icon}</span>${esc(title)}</button>`).join('');
@@ -129,7 +132,7 @@
  };
  const priorReset=resetSession;
  resetSession=function(message=''){
-  catalogCache=null;catalogOwner=null;filterOwner=null;activeFilters={};dashboardSection='';archiveViews.clear();editorDirty=false;editorBusy=false;editorOwner=null;
+  catalogCache=null;catalogOwner=null;filterOwner=null;activeFilters={};dashboardSection='';structureCompany=null;structureSite='';archiveViews.clear();editorDirty=false;editorBusy=false;editorOwner=null;
   $('#hrm-editor')?.close();priorReset(message);
  };
  const priorRender=render;
@@ -140,6 +143,8 @@
   if(page==='hrm_access')return renderAccess(target,viewOwner);
   if(page==='hrm_dashboard')return renderDashboard(target,viewOwner);
   if(page==='hrm_reports')return renderReports(target,viewOwner);
+  if(page==='hrm_structure')return renderStructure(target,viewOwner);
+  if(page==='hrm_productivity')return renderProductivity(target,viewOwner);
   const module=page.slice(4);
   if(!moduleAvailable(module)){target.innerHTML='<div class="empty"><h2>دسترسی این بخش برای حساب شما تعریف نشده است</h2></div>';return;}
   const resources=await catalog();if(!current(viewOwner))return;
@@ -162,9 +167,119 @@
   tabs.onclick=event=>{const button=event.target.closest('[data-hrm-resource]');if(button)open(button.dataset.hrmResource)};
   await open(selected);
  };
+ async function renderStructure(target,viewOwner){
+  if(!managesAccess()&&!can('personnel')){target.innerHTML='<div class="empty">مشاهده ساختار و نفرات برای این حساب مجاز نیست.</div>';return;}
+  if(structureCompany!==Number(cid)){structureCompany=Number(cid);structureSite='';}
+  const [data,resources]=await Promise.all([api(scopedHrm('hrm/site-roster',cid,false)),catalog()]);if(!current(viewOwner))return;
+  const sites=asRows(data.sites),people=[...new Map([...asRows(data.people),...asRows(data.unassigned)].map(person=>[String(person.id??person.employee_id),person])).values()],temporary=asRows(data.temporary_assignments);
+  if(structureSite&&structureSite!=='unassigned'&&!sites.some(site=>String(site.id)===structureSite))structureSite='';
+  const companyName=user.companies?.find(company=>Number(company.id)===Number(cid))?.name||'شرکت انتخاب‌شده';
+  const siteSchema=resources.sites,peopleSchema=resources.people||{},canCreateSite=managesAccess()&&siteSchema&&schemaCan(siteSchema,'create');
+  target.innerHTML='<div class="panel hrm-intro"><div class="hrm-section-heading"><div><p class="eyebrow">ساختار سازمانی</p><h2>سایت‌ها و نفرات '+esc(companyName)+'</h2><p class="help">انتساب فعلی هر فرد و حضور موقت در سایت‌های دیگر جدا نمایش داده می‌شوند. شرکت استخدام‌کننده با مأموریت موقت تغییر نمی‌کند.</p></div><div class="hrm-action-group">'+(managesAccess()?'<button type="button" class="quiet" id="hrm-manage-companies">مدیریت شرکت‌ها</button>':'')+(canCreateSite?'<button type="button" id="hrm-site-add">＋ افزودن سایت</button>':'')+'</div></div></div><div class="metrics hrm-structure-metrics">'+[['sites','سایت مجاز',sites.length],['employees','نفر در انتساب فعلی',people.length],['temporary_assignments','فعالیت موقت',temporary.length],['unassigned','نفر بدون سایت',asRows(data.unassigned).length]].map(([key,title,value])=>'<div class="card"><small>'+title+'</small><strong data-structure-total="'+key+'">'+fa(value)+'</strong></div>').join('')+'</div><div class="panel"><h2>سایت‌های شرکت</h2><p class="help">افزودن، ویرایش و حذف ساختار فقط در اختیار ادمین اصلی است. سایت دارای پرسنل، سابقه یا محدوده دسترسی حذف نمی‌شود؛ برای توقف استفاده، آن را غیرفعال کنید.</p><div id="hrm-structure-error" class="error" role="alert"></div><div id="hrm-structure-sites"></div></div><div class="panel"><form id="hrm-roster-filters" class="hrm-roster-filter"><label>نمایش نفرات سایت<select id="hrm-roster-site" data-searchable="true"><option value="">تمام سایت‌های مجاز شرکت</option>'+sites.map(site=>'<option value="'+site.id+'" '+(structureSite===String(site.id)?'selected':'')+'>'+esc(site.name)+'</option>').join('')+'<option value="unassigned" '+(structureSite==='unassigned'?'selected':'')+'>بدون سایت ثبت‌شده</option></select></label><label>جستجو در نفرات<input id="hrm-roster-search" placeholder="نام، کد پرسنلی، واحد یا سمت" autocomplete="off"></label><div class="hrm-action-group">'+(schemaCan(peopleSchema,'create')?'<button type="button" id="hrm-roster-add">＋ ثبت فرد</button>':'')+'<button type="button" class="quiet" id="hrm-roster-edit">پرونده و انتساب افراد</button></div></form></div><div class="panel" id="hrm-roster-current"><h2>نفرات با انتساب فعلی</h2><p class="help">این فهرست، مبنای مشخص شدن پرسنل هر سایت است.</p><div data-roster-table></div></div><div class="panel" id="hrm-roster-temporary"><h2>فعالیت‌های موقت در سایت</h2><p class="help">فعالیت‌های جاری و مؤثر در تاریخ '+esc(dateInput(data.as_of))+'؛ افراد این جدول به شمارش انتساب اصلی سایت اضافه نمی‌شوند.</p><div data-roster-table></div></div>';
+  const siteTable=target.querySelector('#hrm-structure-sites');
+  siteTable.innerHTML=sites.length?'<div class="table-wrap"><table><thead><tr><th>سایت</th><th>نوع</th><th>وضعیت</th><th>نفرات سایت</th><th>فعالیت موقت</th><th>عملیات</th></tr></thead><tbody>'+sites.map(site=>'<tr data-structure-site="'+site.id+'"><td>'+esc(site.name)+'</td><td>'+esc(site.kind||'—')+'</td><td>'+esc(site.active?'فعال':'غیرفعال')+'</td><td>'+fa(site.employee_count)+'</td><td>'+fa(site.temporary_assignment_count)+'</td><td class="hrm-row-actions"><button type="button" class="quiet" data-structure-people="'+site.id+'">نمایش نفرات</button>'+(managesAccess()&&schemaCan(siteSchema,'edit')?'<button type="button" class="quiet" data-structure-edit="'+site.id+'">ویرایش سایت</button>':'')+(managesAccess()&&siteSchema?.deletable&&schemaCan(siteSchema,'delete')?'<button type="button" class="quiet" data-structure-delete="'+site.id+'">حذف سایت</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty"><h3>سایتی ثبت نشده است</h3><p>پرسنل بدون سایت مشخص در فهرست پایین قابل شناسایی‌اند.</p></div>';
+  let search='',offset=0;
+  function drawRoster(){
+   const matches=people.filter(person=>(structureSite==='unassigned'?!person.site_id:!structureSite||String(person.site_id)===structureSite)&&searchMatch([person.name,person.code,person.site_name,person.department,person.job,person.location].join(' '),search));
+   if(offset>=matches.length)offset=Math.max(0,Math.floor((matches.length-1)/25)*25);
+   const table=target.querySelector('#hrm-roster-current [data-roster-table]');table.innerHTML='<p class="help">'+fa(matches.length)+' نفر</p>'+simpleTable(matches.slice(offset,offset+25),['code','name','site_name','department','job','location','status'],peopleSchema)+(matches.length?pager(offset,25,matches.length):'');
+   bindPager(table,()=>{offset-=25;drawRoster()},()=>{offset+=25;drawRoster()});
+   const visitors=temporary.filter(record=>structureSite!=='unassigned'&&(!structureSite||String(record.target_site_id)===structureSite)&&searchMatch([record.employee_name,record.employee_code,record.company_name,record.target_site_name,record.activity_location].join(' '),search));
+   target.querySelector('#hrm-roster-temporary [data-roster-table]').innerHTML=simpleTable(visitors,['employee_code','employee_name','company_name','target_site_name','start_date','end_date','activity_location'],{fields:[{key:'company_name',label:'شرکت استخدام‌کننده'},{key:'target_site_name',label:'سایت فعالیت موقت'},{key:'start_date',label:'از تاریخ',type:'date'},{key:'end_date',label:'تا تاریخ',type:'date'}]});
+  }
+  target.querySelector('#hrm-roster-site').onchange=event=>{structureSite=event.target.value;offset=0;drawRoster()};
+  target.querySelector('#hrm-roster-search').oninput=event=>{search=event.target.value;offset=0;drawRoster()};
+  target.querySelector('#hrm-roster-filters').onsubmit=event=>event.preventDefault();drawRoster();
+  target.querySelector('#hrm-manage-companies')?.addEventListener('click',()=>navigateTo('companies'));
+  target.querySelector('#hrm-site-add')?.addEventListener('click',()=>openEditor('sites',siteSchema,null,viewOwner));
+  target.querySelector('#hrm-roster-add')?.addEventListener('click',()=>{ensureFilters();if(structureSite&&structureSite!=='unassigned')activeFilters.site_id=structureSite;else delete activeFilters.site_id;openEditor('people',peopleSchema,null,viewOwner)});
+  target.querySelector('#hrm-roster-edit').onclick=()=>{ensureFilters();if(structureSite&&structureSite!=='unassigned')activeFilters.site_id=structureSite;else delete activeFilters.site_id;sessionStorage.setItem('nikan-hrm-resource-personnel','people');navigateTo('hrm_personnel')};
+  siteTable.onclick=async event=>{
+   if(workspaceSaving||!current(viewOwner))return;
+   const show=event.target.closest('[data-structure-people]'),edit=event.target.closest('[data-structure-edit]'),remove=event.target.closest('[data-structure-delete]');
+   const site=sites.find(row=>String(row.id)===String(show?.dataset.structurePeople||edit?.dataset.structureEdit||remove?.dataset.structureDelete));if(!site)return;
+   if(show){structureSite=String(site.id);const select=target.querySelector('#hrm-roster-site');select.value=structureSite;select.dispatchEvent(new CustomEvent('nikan-options-changed',{bubbles:true}));offset=0;drawRoster();target.querySelector('#hrm-roster-current').scrollIntoView({behavior:'smooth',block:'start'});return;}
+   if(edit)return openEditor('sites',siteSchema,site,viewOwner);
+   if(!remove||!confirm('سایت «'+site.name+'» حذف شود؟ حذف فقط برای سایت بدون پرسنل، سابقه یا دسترسی متصل انجام می‌شود.'))return;
+   const unlock=workspaceWriteLock(target),error=target.querySelector('#hrm-structure-error');error.textContent='';
+   try{await api(scopedHrm('hrm/sites/'+site.id,cid,false),{method:'DELETE',body:{version:site.version}});if(current(viewOwner)){unlock();await renderCurrent();notice('سایت بدون وابستگی حذف شد.')}}catch(err){if(current(viewOwner)&&err.name!=='AbortError')error.textContent=err.message}finally{unlock()}
+  };
+ }
+ async function renderProductivity(target,viewOwner){
+  if(!moduleAvailable('productivity')){target.innerHTML='<div class="empty"><h2>دسترسی آکورد بهره‌وری برای این حساب تعریف نشده است</h2></div>';return;}
+  const resources=await catalog();if(!current(viewOwner))return;
+  const choices=Object.entries(resources).filter(([key,schema])=>schema.module==='productivity');
+  const tabs=[...choices.map(([key,schema])=>[key,schema.title])];
+  if(can('productivity'))tabs.splice(Math.min(2,tabs.length),0,['calculation','محاسبه و تأیید آکورد']);
+  if(!tabs.length){target.innerHTML='<div class="empty">فرم مجازی برای این بخش در دسترس نیست.</div>';return;}
+  const performanceActions=[['evaluation_periods','۱. دوره ارزیابی'],['performance_criteria','۲. شاخص‌ها و وزن‌ها'],['performance_scores','۳. امتیاز عملکرد افراد']].filter(([key])=>resources[key]);
+  target.innerHTML='<div class="panel hrm-intro"><p class="eyebrow">آکورد بهره‌وری</p><h2>از شاخص عملکرد تا مبلغ قابل بررسی</h2><p class="help">امتیاز هر فرد از شاخص‌ها و وزن‌های دوره ارزیابی خوانده می‌شود. سپس ضابطه آکورد و نسبت مشارکت، مبلغ پیشنهادی را تعیین می‌کنند. اطلاعات ناقص، صفرِ عملکرد فرض نمی‌شود.</p><div class="hrm-workflow-steps">'+performanceActions.map(([key,title])=>'<button type="button" class="quiet" data-go-performance="'+key+'">'+title+'</button>').join('')+'<span>۴. ضابطه و اطلاعات افراد</span><span>۵. محاسبه و نهایی‌سازی</span></div><p class="help">پس از ایجاد ضابطه تازه، از «محاسبه و بررسی» می‌توانید ۸ شاخص پیشنهادی را به دوره خالی اضافه و سپس وزن‌ها و امتیاز افراد را تنظیم کنید. این بخش پرداخت خودکار حقوق انجام نمی‌دهد. آموزش، اطلاعات پزشکی یا حادثه به‌صورت خودکار به کسر امتیاز تبدیل نمی‌شوند.</p></div><div class="hrm-tabs" role="tablist" aria-label="مراحل آکورد بهره‌وری"></div><div id="hrm-productivity-workspace"></div>';
+  const operation=can('productivity')?'read':can('productivity','create')?'create':can('productivity','edit')?'edit':'read';
+  await scopeFilters(target,viewOwner,'productivity',{operation});if(!current(viewOwner))return;
+  target.querySelectorAll('[data-go-performance]').forEach(button=>button.onclick=()=>{sessionStorage.setItem('nikan-hrm-resource-performance',button.dataset.goPerformance);navigateTo('hrm_performance')});
+  const storage='nikan-hrm-resource-productivity',stored=sessionStorage.getItem(storage);let selected=tabs.some(([key])=>key===stored)?stored:tabs[0][0],generation=0;
+  async function open(key){
+   if(workspaceSaving||!current(viewOwner))return;
+   selected=key;sessionStorage.setItem(storage,key);const token=++generation;
+   target.querySelector('.hrm-tabs').innerHTML=tabs.map(([id,title])=>'<button type="button" role="tab" data-productivity-tab="'+id+'" aria-selected="'+(id===selected)+'" class="'+(id===selected?'active':'quiet')+'">'+esc(title)+'</button>').join('');
+   const filters=target.querySelector('#hrm-filters');if(filters)filters.hidden=key==='calculation';
+   const workspace=target.querySelector('#hrm-productivity-workspace'),valid=()=>current(viewOwner)&&token===generation;workspace.innerHTML='<div class="empty" role="status">در حال دریافت اطلاعات…</div>';
+   try{if(key==='calculation')await renderAccordCalculation(workspace,viewOwner,valid);else await renderResource(workspace,key,resources[key],viewOwner,valid)}
+   catch(err){if(valid()&&err.name!=='AbortError'){workspace.innerHTML='<div class="empty"><h3>دریافت این بخش انجام نشد</h3><p>'+esc(err.message)+'</p><button data-productivity-retry>تلاش مجدد</button></div>';workspace.querySelector('[data-productivity-retry]').onclick=()=>open(key)}}
+  }
+  target.querySelector('.hrm-tabs').onclick=event=>{const button=event.target.closest('[data-productivity-tab]');if(button)open(button.dataset.productivityTab)};
+  await open(selected);
+ }
+ function accordPercent(value){return Number(value).toLocaleString('fa-IR',{maximumFractionDigits:4});}
+ function accordMoney(value){
+  if(value===null||value===undefined||value==='')return '—';
+  try{return BigInt(String(value)).toLocaleString('fa-IR')}catch{return typeof value==='number'?value.toLocaleString('fa-IR'):String(value)}
+ }
+ async function renderAccordCalculation(workspace,viewOwner,isCurrent){
+  const policies=asRows(await api(scopedHrm('hrm/accord_policies',cid,false)));if(!isCurrent())return;
+  const storage='nikan-hrm-accord-policy-'+cid,remembered=sessionStorage.getItem(storage);let chosen=policies.some(policy=>String(policy.id)===remembered)?remembered:policies.length===1?String(policies[0].id):'',generation=0;
+  workspace.innerHTML='<div class="panel"><form id="hrm-accord-selection" class="hrm-roster-filter"><label>ضابطه و دوره آکورد<select id="hrm-accord-policy" data-searchable="true"><option value="">ضابطه مورد نظر را انتخاب کنید</option>'+policies.map(policy=>'<option value="'+policy.id+'" '+(chosen===String(policy.id)?'selected':'')+'>'+esc(policy.title+(policy.period_title?' · '+policy.period_title:'')+(policy.status==='finalized'?' · نهایی‌شده':''))+'</option>').join('')+'</select></label><button type="submit" id="hrm-accord-review">محاسبه / تازه‌سازی پیش‌نمایش</button></form><p class="help">محاسبه، تمام افراد ثبت‌شده در همین ضابطه را مبنا قرار می‌دهد. جستجوی نمایشی مبلغ‌ها را تغییر نمی‌دهد. پیش‌نمایش کامل به مجوز مشاهده عملکرد و کل محدوده ضابطه نیاز دارد؛ نتایج نهایی در محدوده مجاز هر کاربر قابل مشاهده‌اند.</p><p id="hrm-accord-error" class="error" role="alert"></p></div><div id="hrm-accord-report"></div>';
+  const error=workspace.querySelector('#hrm-accord-error'),reportBox=workspace.querySelector('#hrm-accord-report');
+  async function load(){
+   if(workspaceSaving||!isCurrent())return;chosen=workspace.querySelector('#hrm-accord-policy').value;sessionStorage.setItem(storage,chosen);const token=++generation;error.textContent='';
+   if(!chosen){reportBox.innerHTML='<div class="empty"><h3>ضابطه‌ای انتخاب نشده است</h3><p>ابتدا دوره، شاخص‌ها و امتیازها را تکمیل، سپس ضابطه و افراد مشمول آکورد را ثبت کنید.</p></div>';return;}
+   reportBox.innerHTML='<div class="empty" role="status">در حال محاسبه آکورد براساس اطلاعات ثبت‌شده…</div>';
+   try{
+    const report=await api(scopedHrm('hrm/accord_report?policy_id='+encodeURIComponent(chosen),cid,false));if(!isCurrent()||token!==generation)return;
+    const policy=report.policy||policies.find(row=>String(row.id)===chosen)||{},rows=asRows(report.rows),metrics=report.metrics||{},finalized=report.status==='finalized'||policy.status==='finalized';
+    const formula=typeof report.formula==='string'?report.formula:policy.method==='pool_budget'?'سهم هر فرد = بودجه کل × امتیاز موزون مشارکت فرد ÷ مجموع امتیازهای موزون مشارکت':'آکورد فرد = مبلغ مبنای فرد × امتیاز عملکرد ÷ ۱۰۰ × نسبت مشارکت';
+    const canFinalize=!finalized&&can('productivity','edit')&&can('performance')&&report.can_finalize===true;
+    const canSeed=!finalized&&can('productivity','edit')&&can('performance','create');
+    reportBox.innerHTML='<div class="panel hrm-accord-summary"><div class="hrm-section-heading"><div><h2>'+esc(policy.title||'نتیجه آکورد')+'</h2><span class="pill">'+(finalized?'نهایی‌شده و محفوظ':'پیش‌نمایش؛ هنوز نهایی نشده')+'</span></div><div class="hrm-action-group">'+(canSeed?'<button type="button" class="quiet" id="hrm-accord-seed">افزودن ۸ شاخص پیشنهادی به دوره خالی</button>':'')+(can('productivity','export')?'<button type="button" class="quiet" id="hrm-accord-export" '+(finalized?'':'disabled title="پس از نهایی‌سازی، خروجی نتایج محفوظ قابل دریافت است"')+'>خروجی Excel نتایج نهایی</button>':'')+(!finalized&&can('productivity','edit')?'<button type="button" id="hrm-accord-finalize" '+(canFinalize?'':'disabled')+'>نهایی‌سازی آکورد</button>':'')+'</div></div><p class="hrm-accord-formula">'+esc(formula)+'</p><p class="help">نسبت مشارکت = دقایق مؤثر تأییدشده ÷ دقایق مبنای دوره. محاسبه ریالی است؛ نتیجه نهایی با جزئیات مبنا نگهداری می‌شود و با ویرایش بعدی امتیازها تغییر نمی‌کند.</p><div class="metrics hrm-accord-metrics">'+[['employees','افراد مشمول',metrics.employees??rows.length,false],['incomplete','اطلاعات ناقص',metrics.incomplete??rows.filter(row=>!row.is_complete).length,false],['total','جمع آکورد (ریال)',metrics.total_accord_rials_exact??metrics.total_accord_rials,true],['unallocated','بودجه تخصیص‌نیافته (ریال)',policy.method==='pool_budget'?(metrics.unallocated_budget_rials_exact??metrics.unallocated_budget_rials):'not_applicable',true]].map(([key,title,value,money])=>'<div class="card"><small>'+title+'</small><strong data-accord-metric="'+key+'">'+(value==='not_applicable'?'کاربرد ندارد':value===null||value===undefined?'قابل محاسبه نیست':money?accordMoney(value):fa(value))+'</strong></div>').join('')+'</div>'+(report.finalize_blockers?.length?'<div class="hrm-accord-blockers"><h3>موارد لازم پیش از نهایی‌سازی</h3><ul>'+report.finalize_blockers.map(item=>'<li>'+esc(typeof item==='string'?item:item.message||item.title||'اطلاعات دوره کامل نیست')+'</li>').join('')+'</ul></div>':'')+(report.policy_metrics&&Number(report.policy_metrics.employees)!==Number(metrics.employees)?'<p class="help">فهرست حاضر در محدوده مجوز شماست؛ ضابطه کامل شامل '+fa(report.policy_metrics.employees)+' فرد است.</p>':'')+'</div><div class="panel"><div class="toolbar"><label>جستجو در نتیجه محاسبه<input id="hrm-accord-search" placeholder="نام، کد، سایت یا واحد" autocomplete="off"></label></div><div id="hrm-accord-results-table"></div></div>';
+    let search='',offset=0;
+    const detailRows=row=>asRows(row.criteria||row.score_details||row.details?.criteria);
+    function draw(){
+     const visible=rows.filter(row=>searchMatch([row.employee_name||row.name,row.employee_code||row.code,row.site_name,row.department].join(' '),search));if(offset>=visible.length)offset=Math.max(0,Math.floor((visible.length-1)/25)*25);
+     const table=reportBox.querySelector('#hrm-accord-results-table');
+     table.innerHTML=visible.length?'<p class="help">'+fa(visible.length)+' فرد در نمایش؛ جستجو در مبلغ محاسبه‌شده تغییری ایجاد نمی‌کند.</p><div class="table-wrap"><table class="hrm-accord-table"><thead><tr><th>کد پرسنلی</th><th>نام فرد / سایت</th><th>امتیاز عملکرد</th><th>تکمیل شاخص‌ها</th><th>مشارکت</th><th>مبلغ مبنا (ریال)</th><th>آکورد (ریال)</th><th>وضعیت و جزئیات</th></tr></thead><tbody>'+visible.slice(offset,offset+25).map(row=>{
+      const missing=Array.isArray(row.missing_criteria)?row.missing_criteria.map(item=>typeof item==='string'?item:item.title||item.name||'شاخص بدون امتیاز').join('، '):'';
+      const details=detailRows(row),status=({incomplete:'اطلاعات ناقص',ready:'قابل بررسی',below_minimum:'کمتر از حداقل تعیین‌شده',zero_participation:'بدون مشارکت مؤثر',draft:'پیش‌نمایش',finalized:'نهایی‌شده'})[row.status]||(!row.is_complete?'اطلاعات ناقص':finalized?'نهایی‌شده':'قابل بررسی');
+      return '<tr data-accord-person="'+esc(row.employee_id)+'"><td>'+esc(row.employee_code||row.code||'—')+'</td><td>'+esc(row.employee_name||row.name||'—')+'<small class="hrm-cell-meta">'+esc([row.site_name,row.department].filter(Boolean).join(' · '))+'</small></td><td>'+(row.score_percent===null||row.score_percent===undefined?'تکمیل نشده':accordPercent(row.score_percent)+'٪')+'</td><td>'+(row.completion_percent===null||row.completion_percent===undefined?(row.is_complete?'کامل':'ناقص'):accordPercent(row.completion_percent)+'٪')+'</td><td>'+(row.participation_percent===null||row.participation_percent===undefined?'ثبت نشده':accordPercent(row.participation_percent)+'٪')+'</td><td>'+accordMoney(row.base_rials_exact??row.base_rials)+'</td><td class="hrm-accord-amount">'+(row.accord_rials===null||row.accord_rials===undefined?'قابل محاسبه نیست':accordMoney(row.accord_rials_exact??row.accord_rials))+'</td><td>'+esc(status)+(missing?'<small class="hrm-cell-meta">تکمیل شود: '+esc(missing)+'</small>':'')+(details.length?'<details><summary>جزئیات شاخص‌ها</summary>'+simpleTable(details,['title','weight','max_score','score','contribution_percent'],{fields:[{key:'title',label:'شاخص'},{key:'weight',label:'وزن'},{key:'max_score',label:'حداکثر'},{key:'score',label:'امتیاز فرد'},{key:'contribution_percent',label:'سهم در امتیاز نهایی'}]})+'</details>':'')+'</td></tr>';
+     }).join('')+'</tbody></table></div>'+pager(offset,25,visible.length):'<div class="empty"><h3>فردی برای نمایش وجود ندارد</h3><p>افراد مشمول را در بخش اطلاعات آکورد ثبت کنید یا عبارت جستجو را تغییر دهید.</p></div>';
+     bindPager(table,()=>{offset-=25;draw()},()=>{offset+=25;draw()});
+    }
+    reportBox.querySelector('#hrm-accord-search').oninput=event=>{search=event.target.value;offset=0;draw()};draw();
+    reportBox.querySelector('#hrm-accord-export')?.addEventListener('click',async()=>{try{download(await api(scopedHrm('hrm/reports/accord_results.xlsx?policy_id='+encodeURIComponent(chosen),cid,false)),'Nikan-Accord-'+chosen+'.xlsx')}catch(err){if(isCurrent()&&err.name!=='AbortError')error.textContent=err.message}});
+    async function mutate(action){
+     if(workspaceSaving||!isCurrent())return;
+     const question=action==='finalize'?'آکورد تمام افراد این ضابطه نهایی شود؟ مبالغ و مبنای امتیاز به‌صورت نسخه محفوظ ثبت می‌شوند و اطلاعات این ضابطه پس از نهایی‌سازی قابل ویرایش نخواهد بود.':'۸ شاخص پیشنهادی به دوره اضافه شود؟ این کار فقط برای دوره باز و بدون شاخص انجام می‌شود؛ سپس عنوان، وزن و حداکثر امتیاز را مطابق ضابطه سازمان تنظیم کنید.';
+     if(!confirm(question))return;const unlock=workspaceWriteLock(workspace);error.textContent='';
+     try{await api(scopedHrm('hrm/accord_policies/'+chosen+'/'+action,cid,false),{method:'POST',body:{version:policy.version,...(action==='finalize'?{calculation_token:report.calculation_token}:{})}});if(isCurrent()){unlock();await renderCurrent();notice(action==='finalize'?'آکورد نهایی شد؛ مبنای محاسبه و نتایج محفوظ هستند.':'شاخص‌های پیشنهادی ثبت شدند؛ وزن و امتیاز افراد را در ارزیابی عملکرد بررسی و تکمیل کنید.')}}catch(err){if(isCurrent()&&err.name!=='AbortError')error.textContent=err.message}finally{unlock()}
+    }
+    reportBox.querySelector('#hrm-accord-finalize')?.addEventListener('click',()=>{if(canFinalize)mutate('finalize')});
+    reportBox.querySelector('#hrm-accord-seed')?.addEventListener('click',()=>mutate('seed-criteria'));
+   }catch(err){if(isCurrent()&&token===generation&&err.name!=='AbortError'){reportBox.replaceChildren();error.textContent=err.message;}}
+  }
+  workspace.querySelector('#hrm-accord-policy').onchange=load;workspace.querySelector('#hrm-accord-selection').onsubmit=event=>{event.preventDefault();load()};await load();
+ }
  async function renderDashboard(target,viewOwner){
   if(!available()){target.innerHTML='<div class="empty"><h2>نقش منابع انسانی برای این حساب تعریف نشده است</h2></div>';return;}
-  const sections=dashboardSections.filter(([key])=>key==='holding'?managesAccess():key==='personnel'?['personnel','contracts','attendance','performance','discipline','loans','welfare','accommodation'].some(module=>can(module)):can(key)||(key==='health_environment'&&can('health')));
+  const sections=dashboardSections.filter(([key])=>key==='holding'?managesAccess():key==='personnel'?['personnel','contracts','attendance','performance','productivity','discipline','loans','welfare','accommodation'].some(module=>can(module)):can(key)||(key==='health_environment'&&can('health')));
   if(!sections.length){target.innerHTML='<div class="panel"><h2>فضای ثبت سوابق مجاز</h2><p class="help">مجوز مشاهده شاخص‌های این حساب فعال نیست؛ از بخش‌های مجاز برای ثبت سوابق استفاده کنید.</p></div><div class="category-cards hrm-module-cards">'+modules.filter(([key])=>moduleAvailable(key)).map(([key,icon,title])=>'<button class="panel hrm-module-card" data-hrm-open="hrm_'+key+'"><span>'+icon+'</span><strong>'+esc(title)+'</strong></button>').join('')+'</div>';target.querySelectorAll('[data-hrm-open]').forEach(button=>button.onclick=()=>navigateTo(button.dataset.hrmOpen));return;}
   if(!sections.some(([key])=>key===dashboardSection))dashboardSection=sections[0]?.[0]||'personnel';
   const section=dashboardSection;ensureFilters();if(section==='holding'&&activeFilters.all_companies===undefined)activeFilters.all_companies='1';
@@ -172,7 +287,7 @@
   const cards=Array.isArray(data.metrics)?data.metrics:Object.entries(data.metrics||{}).map(([key,value])=>({key,label:moduleLabels[key]||key,value}));
   const allowed=modules.filter(([key])=>moduleAvailable(key));
   target.innerHTML='<div class="hero hrm-hero"><div><p class="eyebrow">NIKAN HRM</p><h2>مدیریت یکپارچه سرمایه انسانی نیکان</h2><p>ثبت و پایش سوابق کارکنان توسط مسئولان مجاز هلدینگ، شرکت‌ها و سایت‌ها.</p></div><div class="orb">N</div></div><div class="hrm-tabs" role="tablist" aria-label="داشبوردهای تخصصی">'+sections.map(([key,title])=>'<button type="button" role="tab" data-hrm-dashboard="'+key+'" aria-selected="'+(key===section)+'" class="'+(key===section?'active':'quiet')+'">'+esc(title)+'</button>').join('')+'</div><div class="metrics hrm-metrics">'+(cards.length?cards.map(card=>'<div class="card" data-hrm-metric="'+esc(card.key)+'"><small>'+esc(card.label||card.key)+'</small><strong>'+(card.missing||card.value===null||card.value===undefined?'داده ثبت نشده':typeof card.value==='number'?fa(card.value):esc(card.value))+'</strong><p>'+esc(card.unit||'در محدوده دسترسی شما')+'</p></div>').join(''):'<p class="help">اطلاعات کافی برای محاسبه شاخص این محدوده ثبت نشده است.</p>')+'</div><div id="hrm-alerts"></div><div class="category-cards hrm-module-cards">'+allowed.map(([key,icon,title])=>'<button type="button" class="panel hrm-module-card" data-hrm-open="hrm_'+key+'"><span aria-hidden="true">'+icon+'</span><strong>'+esc(title)+'</strong><small>'+(['create','edit'].some(operation=>can(key,operation))?'ثبت و مشاهده سوابق مجاز':'مشاهده سوابق مجاز')+'</small></button>').join('')+'</div>';
-  const filterModule=section==='holding'?'reports':section==='personnel'?['personnel','contracts','attendance','performance','discipline','loans','welfare','accommodation'].find(module=>can(module))||'personnel':section==='health_environment'&&!can(section)?'health':section;
+  const filterModule=section==='holding'?'reports':section==='personnel'?['personnel','contracts','attendance','performance','productivity','discipline','loans','welfare','accommodation'].find(module=>can(module))||'personnel':section==='health_environment'&&!can(section)?'health':section;
   await scopeFilters(target,viewOwner,filterModule,{aggregate:true});if(!current(viewOwner))return;
   target.querySelectorAll('[data-hrm-dashboard]').forEach(button=>button.onclick=()=>{dashboardSection=button.dataset.hrmDashboard;renderCurrent()});
   target.querySelectorAll('[data-hrm-open]').forEach(button=>button.onclick=()=>navigateTo(button.dataset.hrmOpen));
@@ -200,8 +315,8 @@
    const filtered=rows.filter(row=>Object.entries(row).some(([field,value])=>field!=='content'&&searchMatch(typeof value==='object'?JSON.stringify(value):cellValue(schema,field,value,row),query)));
    if(offset>=filtered.length)offset=Math.max(0,Math.floor((filtered.length-1)/25)*25);
    status.textContent=readable?fa(filtered.length)+' رکورد در محدوده مجاز':'این حساب مجوز مشاهده سوابق این بخش را ندارد.';
-   const actions=editable||deletable||(key==='contracts'&&creatable)||key==='documents'||key==='people';
-   table.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr>${columns.map(field=>`<th>${esc(fieldLabel(schema,field))}</th>`).join('')}${historyEnabled?'<th>وضعیت سابقه</th>':''}${actions?'<th>عملیات</th>':''}</tr></thead><tbody>${filtered.slice(offset,offset+25).map(row=>`<tr data-hrm-row="${esc(row.id??row.employee_id)}">${columns.map(field=>`<td>${esc(cellValue(schema,field,row[field],row))}</td>`).join('')}${historyEnabled?'<td>'+esc(row.is_deleted?'بایگانی‌شده':row.status==='cancelled'||row.status==='voided'?'ابطال‌شده':'فعال')+'</td>':''}${actions?`<td class="hrm-row-actions">${schema.restorable&&editable&&row.is_deleted?`<button type="button" class="quiet" data-hrm-restore="${esc(row.id)}">بازیابی سابقه</button>`:''}${editable&&!row.is_deleted&&(key!=='documents'||can(row.permission_group,'edit'))?`<button type="button" class="quiet" data-hrm-edit="${esc(row.id??row.employee_id)}">ویرایش</button>`:''}${deletable&&!row.is_deleted?`<button type="button" class="quiet" data-hrm-delete="${esc(row.id)}">حذف / ابطال</button>`:''}${key==='contracts'&&creatable&&!row.is_deleted?`<button type="button" class="quiet" data-hrm-renew="${esc(row.id)}">ثبت تمدید</button>`:''}${key==='personnel_actions'&&editable&&!row.applied?`<button type="button" class="quiet" data-hrm-apply="${esc(row.id)}">اجرای حکم</button>`:''}${key==='documents'?`<button type="button" class="quiet" data-hrm-file="${esc(row.id)}">دریافت فایل</button>`:''}${key==='people'&&can('training')?`<button type="button" class="quiet" data-hrm-training="${esc(row.id??row.employee_id)}">پرونده آموزش</button>`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${pager(offset,25,filtered.length)}`:'<div class="empty"><h2>رکوردی پیدا نشد</h2><p>'+esc(query?'عبارت دیگری جستجو کنید.':'برای این محدوده هنوز اطلاعاتی ثبت نشده است.')+'</p></div>';
+   const actions=editable||deletable||(key==='contracts'&&creatable)||key==='documents'||key==='people'||(key==='accord_policies'&&readable);
+   table.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr>${columns.map(field=>`<th>${esc(fieldLabel(schema,field))}</th>`).join('')}${historyEnabled?'<th>وضعیت سابقه</th>':''}${actions?'<th>عملیات</th>':''}</tr></thead><tbody>${filtered.slice(offset,offset+25).map(row=>`<tr data-hrm-row="${esc(row.id??row.employee_id)}">${columns.map(field=>`<td>${esc(cellValue(schema,field,row[field],row))}</td>`).join('')}${historyEnabled?'<td>'+esc(row.is_deleted?'بایگانی‌شده':row.status==='cancelled'||row.status==='voided'?'ابطال‌شده':'فعال')+'</td>':''}${actions?`<td class="hrm-row-actions">${schema.restorable&&editable&&row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-restore="${esc(row.id)}">بازیابی سابقه</button>`:''}${editable&&!row.is_deleted&&!accordLocked(key,row)&&(key!=='documents'||can(row.permission_group,'edit'))?`<button type="button" class="quiet" data-hrm-edit="${esc(row.id??row.employee_id)}">ویرایش</button>`:''}${deletable&&!row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-delete="${esc(row.id)}">حذف / ابطال</button>`:''}${key==='contracts'&&creatable&&!row.is_deleted?`<button type="button" class="quiet" data-hrm-renew="${esc(row.id)}">ثبت تمدید</button>`:''}${key==='personnel_actions'&&editable&&!row.applied?`<button type="button" class="quiet" data-hrm-apply="${esc(row.id)}">اجرای حکم</button>`:''}${key==='documents'?`<button type="button" class="quiet" data-hrm-file="${esc(row.id)}">دریافت فایل</button>`:''}${key==='accord_policies'&&readable?`<button type="button" class="quiet" data-hrm-accord-review="${esc(row.id)}">محاسبه و بررسی</button>`:''}${key==='people'&&can('training')?`<button type="button" class="quiet" data-hrm-training="${esc(row.id??row.employee_id)}">پرونده آموزش</button>`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${pager(offset,25,filtered.length)}`:'<div class="empty"><h2>رکوردی پیدا نشد</h2><p>'+esc(query?'عبارت دیگری جستجو کنید.':'برای این محدوده هنوز اطلاعاتی ثبت نشده است.')+'</p></div>';
    bindPager(table,()=>{offset-=25;draw()},()=>{offset+=25;draw()});
   };
   workspace.querySelector('#hrm-search').oninput=event=>{query=event.target.value;offset=0;draw()};draw();
@@ -210,10 +325,11 @@
   workspace.querySelector('#hrm-attendance-import')?.addEventListener('click',()=>attendanceImport(viewOwner));
   table.onclick=async event=>{
    if(workspaceSaving||!isCurrent())return;
-   const edit=event.target.closest('[data-hrm-edit]'),renew=event.target.closest('[data-hrm-renew]'),file=event.target.closest('[data-hrm-file]'),apply=event.target.closest('[data-hrm-apply]'),remove=event.target.closest('[data-hrm-delete]'),restore=event.target.closest('[data-hrm-restore]'),training=event.target.closest('[data-hrm-training]');
-   const id=edit?.dataset.hrmEdit||renew?.dataset.hrmRenew||file?.dataset.hrmFile||apply?.dataset.hrmApply||remove?.dataset.hrmDelete||restore?.dataset.hrmRestore||training?.dataset.hrmTraining;
+   const edit=event.target.closest('[data-hrm-edit]'),renew=event.target.closest('[data-hrm-renew]'),file=event.target.closest('[data-hrm-file]'),apply=event.target.closest('[data-hrm-apply]'),remove=event.target.closest('[data-hrm-delete]'),restore=event.target.closest('[data-hrm-restore]'),training=event.target.closest('[data-hrm-training]'),accord=event.target.closest('[data-hrm-accord-review]');
+   const id=edit?.dataset.hrmEdit||renew?.dataset.hrmRenew||file?.dataset.hrmFile||apply?.dataset.hrmApply||remove?.dataset.hrmDelete||restore?.dataset.hrmRestore||training?.dataset.hrmTraining||accord?.dataset.hrmAccordReview;
    const row=rows.find(item=>String(item.id??item.employee_id)===String(id));if(!row)return;
    try{
+    if(accord){sessionStorage.setItem('nikan-hrm-accord-policy-'+cid,String(row.id));sessionStorage.setItem('nikan-hrm-resource-productivity','calculation');return renderCurrent();}
     if(edit)return openEditor(key,schema,row,viewOwner);
     if(renew)return openEditor(key,schema,row,viewOwner,{renew:true});
     if(restore){const unlock=workspaceWriteLock(workspace);try{await api(scopedHrm('hrm/'+key+'/'+id+'/restore',cid,false),{method:'POST',body:{version:row.version}});if(isCurrent()){unlock();await renderCurrent();notice('سابقه بازیابی شد؛ تاریخچه بایگانی در سامانه حفظ می‌شود.');}}finally{unlock();}return;}
@@ -283,15 +399,15 @@
   return null;
  }
  async function openEditor(key,schema,row,viewOwner,options={}){
-  if(workspaceSaving||!current(viewOwner)||ensureDialog().open||!schemaCan(schema,options.renew||!row?'create':'edit'))return;
+  if(workspaceSaving||!current(viewOwner)||ensureDialog().open||accordLocked(key,row)||!schemaCan(schema,options.renew||!row?'create':'edit'))return;
   const isRenew=Boolean(options.renew),operation=isRenew||!row?'create':'edit',notesOnly=Boolean(row&&!isRenew&&((key==='contracts'&&row.status==='renewed')||(key==='personnel_actions'&&row.applied))),fields=(schema.fields||[]).filter(field=>!field.readonly&&!['id','version','created','updated'].includes(field.key)&&(!notesOnly||field.key==='notes')&&(!(key==='documents'&&row)||['title','kind'].includes(field.key))).map(field=>field.choices_by_operation?.[operation]?{...field,choices:field.choices_by_operation[operation]}:field);
   const referenceSchema=key==='documents'?{...schema,module:row?.permission_group||choicesOf(fields.find(field=>field.key==='permission_group')||{})[0]?.[0]||schema.module}:schema,optionsByField={};
   try{
    await Promise.all(fields.map(async field=>{optionsByField[field.key]=await referenceOptions(field,referenceSchema,viewOwner,options.renew||!row?'create':'edit',key==='personnel_actions'&&row?.target_company_id&&['sites','units'].includes(field.resource||field.reference)?row.target_company_id:undefined)}));
    if(!current(viewOwner))return;
-   const values={...(row||{})};if(key==='documents'&&!row)values.permission_group=choicesOf(fields.find(field=>field.key==='permission_group')||{})[0]?.[0]||schema.permission_groups?.[0]||'documents';if(!row){for(const field of fields){if(field.key==='company_id')values.company_id=cid;if(field.key==='site_id'&&activeFilters.site_id)values.site_id=activeFilters.site_id;if(field.key==='employee_id'&&activeFilters.employee_id)values.employee_id=activeFilters.employee_id;}}
+   const values={...(row||{})};if(key==='accord_policies'&&!row)values.method='individual_base';if(key==='accord_entries'&&!row)values.policy_id=sessionStorage.getItem('nikan-hrm-accord-policy-'+cid)||'';if(key==='documents'&&!row)values.permission_group=choicesOf(fields.find(field=>field.key==='permission_group')||{})[0]?.[0]||schema.permission_groups?.[0]||'documents';if(!row){for(const field of fields){if(field.key==='company_id')values.company_id=cid;if(field.key==='site_id'&&activeFilters.site_id)values.site_id=activeFilters.site_id;if(field.key==='employee_id'&&activeFilters.employee_id)values.employee_id=activeFilters.employee_id;}}
    if(isRenew){for(const key of ['number','start_date','end_date','issued_date','signed_date','notes'])if(key in values)values[key]='';delete values.parent_contract_id;}
-   const markup=fields.map(field=>fieldHtml(field,values[field.key],optionsByField[field.key],Boolean(row&&!isRenew&&(field.immutable||(['employee_id','loan_id'].includes(field.key)&&['loans','loan_payments','reservations','welfare_uses'].includes(key)))))).join('');
+   const markup=fields.map(field=>fieldHtml(field,values[field.key],optionsByField[field.key],Boolean(row&&!isRenew&&(field.immutable||(key==='accord_policies'&&['company_id','site_id','period_id'].includes(field.key))||(key==='accord_entries'&&['policy_id','employee_id'].includes(field.key))||(['employee_id','loan_id'].includes(field.key)&&['loans','loan_payments','reservations','welfare_uses'].includes(key)))))).join('');
    const upload=key==='documents'&&!row;
    const dialog=dialogShell((isRenew?'ثبت تمدید ':row?'ویرایش ':'ثبت ')+(schema.singular||schema.title),'<p class="help">'+esc(isRenew?'قرارداد قبلی حفظ می‌شود و تمدید به‌عنوان نسخه جدید ثبت خواهد شد.':'اطلاعات در محدوده مجاز شما ثبت می‌شود. تاریخ‌ها را شمسی وارد کنید؛ مبلغ‌ها بر حسب ریال هستند.')+'</p><div class="hrm-fields">'+markup+(upload?'<label class="hrm-wide">فایل مدرک (PDF، تصویر یا Word)<input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg,.docx"><small class="help">مدرک فقط از مسیر مجاز و به صورت فایل قابل دریافت است.</small></label>':'')+'</div>');
    if(!dialog)return;const form=dialog.querySelector('form'),formOwner=editorOwner,error=dialog.querySelector('#hrm-form-error');
@@ -307,23 +423,40 @@
     }
    }
    (form.elements.namedItem('target_site_id')||form.elements.namedItem('site_id'))?.addEventListener('change',restrictUnits);restrictUnits();
+   function bindAccordPolicy(){
+    if(key!=='accord_policies')return;
+    const period=form.elements.namedItem('period_id'),site=form.elements.namedItem('site_id'),record=optionsByField.period_id?.records?.find(item=>String(item.id)===String(period?.value));
+    if(site){site.dataset.readonly='true';if(record)site.value=record.site_id?String(record.site_id):'';site.dispatchEvent(new CustomEvent('nikan-options-changed',{bubbles:true}));}
+    const budget=form.elements.namedItem('budget_rials'),label=budget?.closest('label'),pooled=form.elements.namedItem('method')?.value==='pool_budget';if(budget&&label){label.hidden=!pooled;budget.disabled=!pooled;budget.required=pooled;}
+   }
+   form.elements.namedItem('period_id')?.addEventListener('change',bindAccordPolicy);form.elements.namedItem('method')?.addEventListener('change',bindAccordPolicy);bindAccordPolicy();
+   function restrictAccordInput(){
+    if(key!=='accord_entries')return;
+    const policySelect=form.elements.namedItem('policy_id'),policy=optionsByField.policy_id?.records?.find(item=>String(item.id)===String(policySelect?.value));
+    const personSelect=form.elements.namedItem('employee_id'),personOptions=optionsByField.employee_id;
+    if(personSelect&&personOptions?.records){const previous=personSelect.value,allowed=personOptions.records.filter(person=>!policy||((!policy.company_id||Number(person.company_id)===Number(policy.company_id))&&(!policy.site_id||Number(person.site_id)===Number(policy.site_id))));personSelect.innerHTML='<option value="">انتخاب کنید</option>'+allowed.map(person=>'<option value="'+(person.id??person.employee_id)+'" '+(String(person.id??person.employee_id)===previous?'selected':'')+'>'+esc((person.name||person.employee_name)+' · '+person.code+(person.site_name?' · '+person.site_name:''))+'</option>').join('');personSelect.dispatchEvent(new CustomEvent('nikan-options-changed',{bubbles:true}));}
+    const base=form.elements.namedItem('base_rials'),label=base?.closest('label');if(base&&label){const pooled=policy?.method==='pool_budget';label.hidden=pooled;base.disabled=pooled;base.required=Boolean(policy&&!pooled);}
+   }
+   form.elements.namedItem('policy_id')?.addEventListener('change',restrictAccordInput);restrictAccordInput();
+   const scheduled=form.elements.namedItem('scheduled_minutes'),actual=form.elements.namedItem('actual_minutes');if(key==='accord_entries'&&scheduled&&actual){const bounds=()=>{scheduled.step='1';actual.step='1';actual.max=scheduled.value||'';};scheduled.addEventListener('input',bounds);bounds();}
    let referenceGeneration=0,referenceBusy=false,lastReferenceCompany=Number(values.target_company_id||values.company_id||cid);
    (form.elements.namedItem('target_company_id')||form.elements.namedItem('company_id'))?.addEventListener('change',async event=>{
     const company=Number(event.target.value);if(!company||company===lastReferenceCompany)return;lastReferenceCompany=company;const generation=++referenceGeneration;referenceBusy=true;form.querySelector('#hrm-save').disabled=true;
     try{
-     for(const field of fields.filter(item=>item.type==='site'||['sites','units'].includes(item.resource||item.reference))){
+     for(const field of fields.filter(item=>item.type==='site'||['sites','units'].includes(item.resource||item.reference)||(key==='accord_policies'&&(item.resource||item.reference)==='evaluation_periods'))){
       const choices=await referenceOptions(field,referenceSchema,viewOwner,options.renew||!row?'create':'edit',company);
       if(!current(formOwner)||generation!==referenceGeneration||!dialog.open)return;
       optionsByField[field.key]=choices;const select=form.elements.namedItem(field.key);
       if(select){select.innerHTML='<option value="">انتخاب نشده</option>'+(choices||[]).map(([id,title])=>'<option value="'+esc(id)+'">'+esc(title)+'</option>').join('');select.dispatchEvent(new CustomEvent('nikan-options-changed',{bubbles:true}));}
      }
-     restrictUnits();
+     restrictUnits();bindAccordPolicy();
     }catch(err){if(current(formOwner)&&err.name!=='AbortError')error.textContent=err.message;}
     finally{if(generation===referenceGeneration){referenceBusy=false;if(dialog.open&&!editorBusy)form.querySelector('#hrm-save').disabled=false;}}
    });
    form.onsubmit=async event=>{
     event.preventDefault();if(editorBusy||referenceBusy||!current(formOwner))return;
-    const payload={};for(const field of fields){const input=form.elements.namedItem(field.key);if(!input||input.disabled)continue;let value=input.value;if(value===''&&!field.required&&!row)continue;if(['number','integer','money','boolean','checkbox'].includes(field.type))value=value===''?null:Number(value);else if(['employee','company'].includes(field.type)||/_id$/.test(field.key))value=value===''?null:Number(value);payload[field.key]=value;}
+    const payload={};for(const field of fields){const input=form.elements.namedItem(field.key);if(!input||input.disabled)continue;let value=input.value;if(value===''&&!field.required&&!row)continue;if(/_rials$/.test(field.key)||field.type==='money')value=value===''?null:value;else if(['number','integer','boolean','checkbox'].includes(field.type))value=value===''?null:Number(value);else if(['employee','company'].includes(field.type)||/_id$/.test(field.key))value=value===''?null:Number(value);payload[field.key]=value;}
+    if(key==='accord_policies'&&payload.method==='individual_base')payload.budget_rials=null;
     if(row?.version!==undefined)payload.version=row.version;
     if(isRenew){delete payload.employee_id;delete payload.company_id;delete payload.parent_contract_id;}
     editorBusy=true;error.textContent='';const unlock=workspaceWriteLock(dialog);
@@ -331,7 +464,8 @@
      const path=scopedHrm('hrm/'+key+(isRenew?'/'+row.id+'/renew':row?'/'+(row.id??row.employee_id):''),cid,false);
      let body=payload;
      if(upload){body=new FormData();for(const [name,value] of Object.entries(payload))if(value!==null&&value!==undefined)body.append(name,String(value));body.append('file',form.elements.namedItem('file').files[0]);}
-     await api(path,{method:isRenew||!row?'POST':'PUT',body});
+     const saved=await api(path,{method:isRenew||!row?'POST':'PUT',body});
+     if(key==='accord_policies'&&!row&&saved?.id){sessionStorage.setItem('nikan-hrm-accord-policy-'+cid,String(saved.id));sessionStorage.setItem('nikan-hrm-resource-productivity','calculation');}
      if(!current(formOwner))return;editorDirty=false;dialog.close();unlock();await renderCurrent();notice(isRenew?'تمدید قرارداد به‌عنوان نسخه جدید ثبت شد.':'اطلاعات ثبت شد؛ سابقه تغییر در سامانه نگهداری می‌شود.');
     }catch(err){if(current(formOwner)&&err.name!=='AbortError')error.textContent=err.message}
     finally{unlock();editorBusy=false;}

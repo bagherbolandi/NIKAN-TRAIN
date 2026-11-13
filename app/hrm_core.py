@@ -11,7 +11,7 @@ from .hrm_common import date_value, jalali_display, today_iso
 from .validation import positive_id
 
 SECTIONS = {
-    'personnel': ('personnel', 'contracts', 'documents', 'attendance', 'performance',
+    'personnel': ('personnel', 'contracts', 'documents', 'attendance', 'performance', 'productivity',
                   'discipline', 'loans', 'welfare', 'accommodation'),
     'training': ('training',),
     'hse': ('hse',),
@@ -65,6 +65,8 @@ def _schema_for_actor(raw, actor):
         full_company = any(not s.get('department') and not s.get('site_id') for s in actor['scopes'])
         if config and not full_company:
             schema['can_create'] = schema['can_edit'] = schema['can_write'] = False
+        if schema.get('admin_only_write') and not actor.get('is_primary_admin'):
+            schema['can_create'] = schema['can_edit'] = schema['can_delete'] = schema['can_write'] = False
         schemas[key] = schema
     return schemas
 
@@ -227,6 +229,7 @@ def register(app, db, authenticated, audit, error):
         if resource not in raw:
             raise ValueError('فهرست مرجع یافت نشد')
         source = raw[resource]
+        period_bridge = False
         if resource in ('sites', 'units'):
             table = 'hrm_' + resource
             actor = ctx(db())
@@ -249,10 +252,17 @@ def register(app, db, authenticated, audit, error):
             require(db(), group, operation='read')
             module, operation = group, 'read'
         elif source['module'] != module:
-            raise PermissionError()
+            if resource == 'evaluation_periods' and module == 'productivity':
+                # Accord needs only period labels. Creating an accord never
+                # grants performance access; the source read grant is explicit.
+                require(db(), 'performance', operation='read')
+                module, operation = 'performance', 'read'
+                period_bridge = True
+            else:
+                raise PermissionError()
         g.hrm_reference_operation = dict(module=module, operation=operation)
         protected_rows=rows_for(resource)
-        rows=protected_rows if resource=='training_courses' else filter_rows(db(),protected_rows,module)
+        rows=protected_rows if resource=='training_courses' or period_bridge else filter_rows(db(),protected_rows,module)
         result = []
         for row in rows:
             label = next((row.get(key) for key in ('title', 'name', 'number', 'code') if row.get(key)), None)
@@ -305,7 +315,7 @@ def register(app, db, authenticated, audit, error):
             if incomplete:
                 quality.append(f'سایت یا شغل {incomplete} نفر تکمیل نشده است.')
         names = {'contracts': 'قراردادها', 'attendance': 'سوابق حضور و غیاب',
-                 'performance_scores': 'امتیازهای عملکرد', 'discipline': 'سوابق تشویق و انضباط',
+                 'performance_scores': 'امتیازهای عملکرد', 'accord_results': 'محاسبات قطعی آکورد', 'discipline': 'سوابق تشویق و انضباط',
                  'loans': 'وام‌ها و تسهیلات', 'welfare_uses': 'سوابق خدمات رفاهی',
                  'reservations': 'سوابق اقامت', 'ppe_issues': 'سوابق تحویل تجهیزات',
                  'hse_incidents': 'حوادث و اقدامات پیگیری', 'health_records': 'سوابق معاینات طب کار'}
@@ -455,7 +465,11 @@ def register(app, db, authenticated, audit, error):
                       loan_title='عنوان وام',service_name='خدمت رفاهی',property_name='اقامتگاه',
                       competency_title='عنوان شایستگی',current_level='سطح فعلی',required_level='سطح لازم',
                       period_title='دوره ارزیابی',score_percent='امتیاز عملکرد (درصد)',
-                      employee_count='تعداد کارکنان',contract_count='تعداد قرارداد')
+                      employee_count='تعداد کارکنان',contract_count='تعداد قرارداد',
+                      policy_title='عنوان ضابطه آکورد',base_rials='مبلغ مبنا (ریال)',
+                      accord_rials='آکورد محاسبه‌شده (ریال)',participation_percent='درصد مشارکت',
+                      scheduled_minutes='دقایق موظفی',actual_minutes='دقایق مشارکت تأییدشده',
+                      calculated_at='زمان تأیید محاسبه',period_start_date='شروع دوره',period_end_date='پایان دوره')
         title = schema['title']
         sheet.append(['نیکان — ' + title])
         sheet.append(['تاریخ گزارش', jalali_display(today_iso())])

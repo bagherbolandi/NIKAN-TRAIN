@@ -14,7 +14,7 @@ REQUIRED={'companies','users','employees','skills','assessments','records','cert
 RECOVERY_ADDITIONS={'holding_catalog_state':1,'course_participants':0,'company_registry':1}
 RECOVERY_ADDITIONS.update({'schema_migrations':1,'need_reviews':0,'development_plans':0,
                           'password_recovery':0,'recovery_rate':0,
-                          'hrm_schema_migrations':2,'hrm_user_access':0,
+                          'hrm_schema_migrations':3,'hrm_user_access':0,
                           'hrm_user_scopes':0,'hrm_user_permissions':0})
 from app.hrm_people import RECOVERY_ADDITIONS as PEOPLE_ADDITIONS
 from app.hrm_hse import RECOVERY_ADDITIONS as HSE_ADDITIONS
@@ -26,6 +26,8 @@ RECOVERY_ADDITIONS.update({name:0 for name in WORKFORCE_TABLES})
 RECOVERY_ADDITIONS.update({name:0 for name in BENEFIT_TABLES.values()})
 RECOVERY_ADDITIONS.update({name:0 for name in ('hrm_training_course_context',
     'hrm_training_record_context','hrm_training_assessment_context','hrm_training_requirements')})
+
+RECOVERY_ADDITIONS.update({name:0 for name in ('hrm_accord_policies','hrm_accord_entries','hrm_accord_results')})
 
 def digest(path):
  h=hashlib.sha256()
@@ -91,7 +93,7 @@ def decrypt(backup,output,key):
 def recovery_check(backup,key,temp_root):
  with tempfile.TemporaryDirectory(prefix='recovery-test-',dir=temp_root) as folder:
   candidate=Path(folder)/'nikan.sqlite3';header=decrypt(backup,candidate,key)
-  marker_versions={'schema_migrations':{'0.11.0'},'hrm_schema_migrations':{'hrm-1','hrm-0.12'}}
+  marker_versions={'schema_migrations':{'0.11.0'},'hrm_schema_migrations':{'hrm-1','hrm-0.12','hrm-0.13'}}
   markers={}
   with sqlite3.connect(candidate) as before:
    for name in marker_versions:

@@ -347,3 +347,153 @@ def test_restart_preserves_identity_contract_blob_and_foreign_keys(hrm):
     assert {table: sql_rows(hrm, table) for table in tables} == before
     with sqlite3.connect(again.config['DB']) as connection:
         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_only_primary_admin_can_modify_organization_even_with_full_delegated_grants(hrm):
+    permissions = {key: {operation: True for operation in ('read', 'create', 'edit', 'delete', 'export')}
+                   for key in ('personnel', 'settings')}
+    client, headers = account(hrm, 'whole-company-organizer', permissions,
+                              scopes=[{'company_id': 1}])
+    site, unit = hrm['sites'][0], hrm['units'][0]
+    assert client.get('/api/hrm/sites?company_id=1').status_code == 200
+    assert client.get('/api/hrm/units?company_id=1').status_code == 200
+    for resource, row, payload in [('sites', site, {'name': 'Delegated site'}),
+                                   ('units', unit, {'name': 'Delegated unit', 'site_id': site['id']})]:
+        assert post(client, headers, resource, payload).status_code == 403
+        assert client.put(f'/api/hrm/{resource}/{row["id"]}?company_id=1', headers=headers,
+                          json={'version': row['version'], 'name': 'Forbidden update'}).status_code == 403
+        assert client.delete(f'/api/hrm/{resource}/{row["id"]}?company_id=1', headers=headers,
+                             json={'version': row['version']}).status_code == 403
+    assert client.get('/api/companies').status_code == 403
+    assert client.post('/api/companies', headers=headers, json={'name': 'Forbidden company'}).status_code == 403
+    # Personnel editing within the delegated company remains available.
+    response = client.put(f'/api/hrm/people/{hrm["person"]["id"]}?company_id=1', headers=headers,
+                          json={'version': hrm['person']['version'], 'phone': '09123456780'})
+    assert response.status_code == 200, response.json
+
+
+def test_admin_empty_site_unit_delete_and_recreate_never_reuses_identifiers(hrm):
+    admin, headers = hrm['client'], hrm['headers']
+    site = create(admin, headers, 'sites', {'name': 'Disposable site'})
+    unit = create(admin, headers, 'units', {'name': 'Disposable unit', 'site_id': site['id']})
+    assert admin.delete(f'/api/hrm/sites/{site["id"]}?company_id=1', headers=headers,
+                        json={'version': site['version']}).status_code == 409
+    assert admin.delete(f'/api/hrm/units/{unit["id"]}?company_id=1', headers=headers,
+                        json={'version': unit['version'] - 1}).status_code == 409
+    assert admin.delete(f'/api/hrm/units/{unit["id"]}?company_id=1', headers=headers,
+                        json={'version': unit['version']}).status_code == 200
+    next_unit = create(admin, headers, 'units', {'name': 'Next unit', 'site_id': site['id']})
+    assert next_unit['id'] > unit['id']
+    assert admin.delete(f'/api/hrm/units/{next_unit["id"]}?company_id=1', headers=headers,
+                        json={'version': next_unit['version']}).status_code == 200
+    assert admin.delete(f'/api/hrm/sites/{site["id"]}?company_id=1', headers=headers,
+                        json={'version': site['version']}).status_code == 200
+    assert admin.get(f'/api/hrm/sites/{site["id"]}?company_id=1').status_code == 404
+    newer = create(admin, headers, 'sites', {'name': 'Next site'})
+    assert newer['id'] > site['id']
+    restarted = create_app(hrm['root'], testing=True)
+    admin, headers = login(restarted)
+    latest = create(admin, headers, 'sites', {'name': 'After restart'})
+    assert latest['id'] > newer['id']
+    latest_unit = create(admin, headers, 'units', {'name': 'After restart unit', 'site_id': latest['id']})
+    assert latest_unit['id'] > next_unit['id']
+    with sqlite3.connect(restarted.config['DB']) as conn:
+        assert conn.execute('SELECT count(*) FROM hrm_org_sequences').fetchone()[0] == 2
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+        assert conn.execute("SELECT count(*) FROM audit WHERE action IN ('hrm_delete_sites','hrm_delete_units')").fetchone()[0] == 3
+
+
+def test_linked_organization_locations_preserve_current_and_historical_ownership(hrm):
+    admin, headers, person = hrm['client'], hrm['headers'], hrm['person']
+    source, target = hrm['sites'][:2]
+    original_unit = hrm['units'][0]
+    for resource, row in [('sites', source), ('units', original_unit)]:
+        result = admin.delete(f'/api/hrm/{resource}/{row["id"]}?company_id=1', headers=headers,
+                              json={'version': row['version']})
+        assert result.status_code == 409 and 'سوابق' in result.json['error']
+    assert admin.put(f'/api/hrm/sites/{source["id"]}?company_id=1', headers=headers,
+                     json={'version': source['version'], 'company_id': 2}).status_code == 400
+    assert admin.put(f'/api/hrm/units/{original_unit["id"]}?company_id=1', headers=headers,
+                     json={'version': original_unit['version'], 'site_id': target['id']}).status_code == 409
+    moved = admin.put(f'/api/hrm/people/{person["id"]}?company_id=1', headers=headers,
+                       json={'version': person['version'], 'site_id': target['id'],
+                             'unit_id': hrm['units'][1]['id'], 'effective_date': today_iso()})
+    assert moved.status_code == 200, moved.json
+    # Leaving a site does not authorize erasing its historical unit/assignment.
+    assert admin.delete(f'/api/hrm/units/{original_unit["id"]}?company_id=1', headers=headers,
+                        json={'version': original_unit['version']}).status_code == 409
+    with sqlite3.connect(hrm['app'].config['DB']) as conn:
+        history = conn.execute('SELECT site_id,previous_site_id FROM hrm_employment_history WHERE employee_id=? ORDER BY id',
+                               (person['id'],)).fetchall()
+        assert history[-1] == (target['id'], source['id'])
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_site_delete_checks_future_foreign_keys_and_target_columns(hrm):
+    admin, headers = hrm['client'], hrm['headers']
+    site = create(admin, headers, 'sites', {'name': 'Future linked site'})
+    with sqlite3.connect(hrm['app'].config['DB']) as conn:
+        conn.execute('CREATE TABLE future_location_facts(id INTEGER PRIMARY KEY,location_id INTEGER REFERENCES hrm_sites(id))')
+        conn.execute('INSERT INTO future_location_facts(location_id) VALUES (?)', (site['id'],))
+    assert admin.delete(f'/api/hrm/sites/{site["id"]}?company_id=1', headers=headers,
+                        json={'version': site['version']}).status_code == 409
+    with sqlite3.connect(hrm['app'].config['DB']) as conn:
+        conn.execute('DELETE FROM future_location_facts')
+        conn.execute('CREATE TABLE future_temp_locations(id INTEGER PRIMARY KEY,target_site_id INTEGER)')
+        conn.execute('INSERT INTO future_temp_locations(target_site_id) VALUES (?)', (site['id'],))
+    assert admin.delete(f'/api/hrm/sites/{site["id"]}?company_id=1', headers=headers,
+                        json={'version': site['version']}).status_code == 409
+
+
+def test_roster_current_members_temporary_visitors_unassigned_and_scopes(hrm):
+    admin, headers = hrm['client'], hrm['headers']
+    first, second, foreign = hrm['sites']
+    person = hrm['person']
+    local = create(admin, headers, 'people', {'code': 'SITE-B-2', 'name': 'Second site employee', 'site_id': second['id']})
+    other = create(admin, headers, 'people', {'code': 'SITE-C-3', 'name': 'Foreign site employee', 'site_id': foreign['id']}, 2)
+    unassigned = admin.post('/api/data/employees?company_id=1', headers=headers,
+                            json={'code': 'UNPLACED-1', 'name': 'Site not assigned yet'})
+    assert unassigned.status_code == 201, unassigned.json
+    assignment = create(admin, headers, 'temporary_assignments', {
+        'employee_id': person['id'], 'target_site_id': foreign['id'], 'start_date': today_iso(),
+        'end_date': (date.today() + timedelta(days=5)).isoformat(), 'activity_location': 'Temporary hall'})
+    all_local = admin.get('/api/hrm/site-roster?company_id=1')
+    assert all_local.status_code == 200, all_local.json
+    assert {row['id'] for row in all_local.json['people']} == {person['id'], local['id']}
+    assert all_local.json['totals']['unassigned'] == 1
+    assert all_local.json['unassigned'][0]['id'] == unassigned.json['id']
+    assert all('national_id' not in row and 'phone' not in row and 'passport_number' not in row
+               for row in all_local.json['people'] + all_local.json['unassigned'])
+    response = admin.get(f'/api/hrm/site-roster?company_id=2&site_id={foreign["id"]}')
+    assert response.status_code == 200, response.json
+    assert [row['id'] for row in response.json['people']] == [other['id']]
+    assert [row['id'] for row in response.json['temporary_assignments']] == [assignment['id']]
+    assert response.json['sites'][0]['employee_count'] == 1
+    assert response.json['sites'][0]['temporary_employee_count'] == 1
+    assert response.json['people_basis'] == 'current_assignment'
+    assert response.json['temporary_basis'] == 'active_on_as_of'
+    before = (date.today() - timedelta(days=1)).isoformat()
+    assert admin.get(f'/api/hrm/site-roster?site_id={foreign["id"]}&as_of={before}').json['temporary_assignments'] == []
+    assert admin.get(f'/api/hrm/site-roster?company_id=1&site_id={foreign["id"]}').status_code == 400
+    assert admin.get('/api/hrm/site-roster?as_of=invalid').status_code == 400
+    local_c, _ = account(hrm, 'local-site-C', {'personnel': {'read': True}},
+                         scopes=[{'company_id': 2, 'site_id': foreign['id']}])
+    scoped = local_c.get(f'/api/hrm/site-roster?company_id=2&site_id={foreign["id"]}')
+    assert scoped.status_code == 200 and [row['id'] for row in scoped.json['people']] == [other['id']]
+    assert scoped.json['temporary_assignments'] == []
+    assert 'Synthetic worker' not in scoped.get_data(as_text=True)
+    assert local_c.get(f'/api/hrm/site-roster?site_id={first["id"]}').status_code == 403
+    denied, _ = account(hrm, 'site-roster-no-personnel', {'contracts': {'read': True}})
+    assert denied.get('/api/hrm/site-roster?company_id=1').status_code == 403
+    holding, _ = account(hrm, 'site-roster-cross-company', {'personnel': {'read': True}},
+                         scopes=[{'company_id': 1, 'site_id': first['id']},
+                                 {'company_id': 2, 'site_id': foreign['id']}])
+    assert len(holding.get(f'/api/hrm/site-roster?site_id={foreign["id"]}').json['temporary_assignments']) == 1
+    moved = admin.put(f'/api/hrm/people/{person["id"]}?company_id=1', headers=headers,
+                       json={'version': person['version'], 'site_id': second['id'],
+                             'unit_id': hrm['units'][1]['id'], 'effective_date': today_iso()})
+    assert moved.status_code == 200, moved.json
+    assert admin.get(f'/api/hrm/site-roster?site_id={first["id"]}').json['people'] == []
+    assert {row['id'] for row in admin.get(f'/api/hrm/site-roster?site_id={second["id"]}').json['people']} == {person['id'], local['id']}
+    # The temporary assignment remains its own fact, distinct from current ownership.
+    assert admin.get(f'/api/hrm/site-roster?site_id={foreign["id"]}').json['temporary_assignments'][0]['company_id'] == 1

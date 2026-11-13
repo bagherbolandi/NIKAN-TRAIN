@@ -269,3 +269,18 @@ def test_concurrent_company_delete_and_employee_insert_never_orphan_data(ready):
         company_exists = connection.execute('SELECT count(*) FROM companies WHERE id=?', (cid,)).fetchone()[0]
         employees = connection.execute('SELECT count(*) FROM employees WHERE company_id=?', (cid,)).fetchone()[0]
         assert (company_exists, employees) == ((0, 0) if delete_status == 200 else (1, 1))
+
+
+def test_company_delete_detects_target_ownership_and_future_foreign_keys(ready):
+    app, client, headers = ready
+    cid = create_company(client, headers, 'Destination company with history')
+    with sqlite3.connect(app.config['DB']) as conn:
+        conn.execute('CREATE TABLE future_company_destinations(id INTEGER PRIMARY KEY,target_company_id INTEGER)')
+        conn.execute('INSERT INTO future_company_destinations(target_company_id) VALUES (?)', (cid,))
+    assert client.delete(f'/api/companies/{cid}', headers=headers).status_code == 409
+    with sqlite3.connect(app.config['DB']) as conn:
+        conn.execute('DELETE FROM future_company_destinations')
+        conn.execute('CREATE TABLE future_declared_owners(id INTEGER PRIMARY KEY,owner INTEGER REFERENCES companies(id))')
+        conn.execute('INSERT INTO future_declared_owners(owner) VALUES (?)', (cid,))
+    assert client.delete(f'/api/companies/{cid}', headers=headers).status_code == 409
+    assert any(row['id'] == cid for row in client.get('/api/companies').json)

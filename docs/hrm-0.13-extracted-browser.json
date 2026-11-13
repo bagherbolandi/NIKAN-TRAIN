@@ -1,0 +1,61 @@
+{
+  "version": "0.13.0",
+  "source_path": "/workspace/nikan-build-tools/extracted-hrm-test",
+  "runtime": "/workspace/nikan-build-tools/standalone-venv/bin/python",
+  "browser_driver": "/workspace/NIKAN-TRAIN/tests/browser_org_accord_smoke.py",
+  "platform": "linux",
+  "launch_arguments": [
+    "/workspace/nikan-build-tools/standalone-venv/bin/python",
+    "-I",
+    "/workspace/nikan-build-tools/extracted-hrm-test/desktop_test.py"
+  ],
+  "native_windows_execution": false,
+  "passed": true,
+  "runtime_probe": {
+    "app_file": "/workspace/nikan-build-tools/extracted-hrm-test/app/__init__.py",
+    "accord_module_file": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_productivity.py",
+    "people_module_file": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_people.py",
+    "prefix": "/workspace/nikan-build-tools/standalone-venv",
+    "base_prefix": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python",
+    "packages": [
+      "Flask",
+      "Jinja2",
+      "MarkupSafe",
+      "Werkzeug",
+      "blinker",
+      "click",
+      "et_xmlfile",
+      "itsdangerous",
+      "lxml",
+      "openpyxl",
+      "pillow",
+      "pip",
+      "python-docx",
+      "typing_extensions",
+      "waitress"
+    ]
+  },
+  "isolated_profile": "/tmp/nikan-013-extracted-browser-jif2hnt3/NikanHRM-Test",
+  "base_url": "http://127.0.0.1:35449",
+  "browser_suite": {
+    "passed": true,
+    "native_windows_execution": false,
+    "checks": [
+      "company/site create, rename and empty-only delete through real forms",
+      "current site roster separates temporary visitors and unassigned people; linked delete preserves staff",
+      "local personnel reader sees only assigned site and cannot change organization",
+      "real accord forms calculate 60/40 weighted score, participation and exact whole-rial award",
+      "closed-period review finalizes immutable result and exports the actual financial result to Excel",
+      "finalized accord remains stable after later source-score correction and rejects monetary edits",
+      "incomplete criteria stay explicit and block finalization without inventing a zero award",
+      "performance permission does not grant financial access; accord reader can view frozen result but cannot change it"
+    ],
+    "javascript_errors": [],
+    "mobile_horizontal_overflow": false
+  },
+  "deployment_mode": "test",
+  "visible_test_label": "نسخه آزمایشی · داده‌های مستقل",
+  "visible_isolation_footer": "نسخه آزمایشی منابع انسانی نیکان · داده‌های این نسخه مستقل از سامانه عملیاتی هستند",
+  "javascript_errors": [],
+  "clean_desktop_shutdown": true
+}

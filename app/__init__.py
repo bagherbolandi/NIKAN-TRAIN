@@ -348,6 +348,8 @@ def create_app(data_dir=None,testing=False):
  CREATE VIEW hrm_live_records AS
  SELECT r.* FROM records r LEFT JOIN hrm_training_record_context x ON x.record_id=r.id
  WHERE COALESCE(x.is_deleted,0)=0;COMMIT;''')
+ from .hrm_productivity import register as register_hrm_productivity
+ register_hrm_productivity(app,db,authenticated,audit,error)
  from .hrm_core import register as register_hrm_core
  register_hrm_core(app,db,authenticated,audit,error)
  from .hrm_migrations import complete as complete_hrm_migration

@@ -1,0 +1,353 @@
+{
+  "version": "0.10",
+  "passed": true,
+  "source_app_sha256": "aca7f622dce41bde94c905aaa125a2cacea1a4035baecb5a7422559a0a812912",
+  "original_tables": {
+    "assessments": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "af62c5f168b4c6f9dd90c039d8d270dd2b9dd31e152b2a49e9befee2d20bfc31",
+      "verified_projection_sha256": "af62c5f168b4c6f9dd90c039d8d270dd2b9dd31e152b2a49e9befee2d20bfc31"
+    },
+    "audit": {
+      "rows": 31,
+      "original_columns": [
+        "id",
+        "created",
+        "user_id",
+        "company_id",
+        "action",
+        "detail"
+      ],
+      "original_projection_sha256": "76ded09bfe8a661aa11f6835e26c4999e035945f430d6be4378adda566b76131",
+      "verified_projection_sha256": "76ded09bfe8a661aa11f6835e26c4999e035945f430d6be4378adda566b76131"
+    },
+    "branding": {
+      "rows": 1,
+      "original_columns": [
+        "key",
+        "mime",
+        "content",
+        "icon",
+        "updated"
+      ],
+      "original_projection_sha256": "c791cf2a01345b7e003a12433a087eb01749eaab446ccbd27854327996c6c6ec",
+      "verified_projection_sha256": "c791cf2a01345b7e003a12433a087eb01749eaab446ccbd27854327996c6c6ec"
+    },
+    "certificates": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "title",
+        "issuer",
+        "issued",
+        "expires",
+        "filename",
+        "mime",
+        "content",
+        "created"
+      ],
+      "original_projection_sha256": "79f7954744df63f24083cd110a492ca3a18b40a9fdd606c854f494d231fd5069",
+      "verified_projection_sha256": "79f7954744df63f24083cd110a492ca3a18b40a9fdd606c854f494d231fd5069"
+    },
+    "companies": {
+      "rows": 6,
+      "original_columns": [
+        "id",
+        "name"
+      ],
+      "original_projection_sha256": "aad041a13ffca8dc0f6f80b5ac20c83ae46086aa91d7853c180cc7e284128d3e",
+      "verified_projection_sha256": "aad041a13ffca8dc0f6f80b5ac20c83ae46086aa91d7853c180cc7e284128d3e"
+    },
+    "company_registry": {
+      "rows": 1,
+      "original_columns": [
+        "id",
+        "high_watermark",
+        "passport_high_watermark",
+        "passport_code_counters"
+      ],
+      "original_projection_sha256": "de0ed6cc12b14d3e64db198a03266b9ce570b403e07cbeee5b4ca13785990690",
+      "verified_projection_sha256": "de0ed6cc12b14d3e64db198a03266b9ce570b403e07cbeee5b4ca13785990690"
+    },
+    "competency_links": {
+      "rows": 2,
+      "original_columns": [
+        "skill_id",
+        "code"
+      ],
+      "original_projection_sha256": "28b81669304086f21429f1a82734f021561bcc20264eae8401ff89ef564762f6",
+      "verified_projection_sha256": "28b81669304086f21429f1a82734f021561bcc20264eae8401ff89ef564762f6"
+    },
+    "course_participants": {
+      "rows": 2,
+      "original_columns": [
+        "course_id",
+        "employee_id",
+        "attended"
+      ],
+      "original_projection_sha256": "695c08cedb01a28f5a1a3d0fd20d6fb2d4e665ddb4d78cf023aeea641776573b",
+      "verified_projection_sha256": "695c08cedb01a28f5a1a3d0fd20d6fb2d4e665ddb4d78cf023aeea641776573b"
+    },
+    "courses": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "title",
+        "date",
+        "instructor",
+        "hours",
+        "cost",
+        "status",
+        "calendar_scope",
+        "external_code"
+      ],
+      "original_projection_sha256": "3d58d283841a5448552cac6910031bfe82b7b045b8abf89efdcd9aa04fdca8f6",
+      "verified_projection_sha256": "3d58d283841a5448552cac6910031bfe82b7b045b8abf89efdcd9aa04fdca8f6"
+    },
+    "employee_meta": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "company_id",
+        "source_job",
+        "mapping",
+        "assessment_status",
+        "assessor",
+        "assessment_date",
+        "evidence",
+        "hr_approved"
+      ],
+      "original_projection_sha256": "7822bd1b07f5324648424aa2b8d8af9231ab3ab58ee9d51cb1708ab2b2d0be74",
+      "verified_projection_sha256": "7822bd1b07f5324648424aa2b8d8af9231ab3ab58ee9d51cb1708ab2b2d0be74"
+    },
+    "employees": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "code",
+        "name",
+        "department",
+        "job",
+        "passport_number",
+        "passport_legacy_number",
+        "passport_aliases",
+        "passport_code_numbered"
+      ],
+      "original_projection_sha256": "55012cd58299adc4da22c5a77576ec606a08c4cccfe919247ab559b3c3f8f8c4",
+      "verified_projection_sha256": "55012cd58299adc4da22c5a77576ec606a08c4cccfe919247ab559b3c3f8f8c4"
+    },
+    "holding_catalog_state": {
+      "rows": 1,
+      "original_columns": [
+        "key",
+        "value"
+      ],
+      "original_projection_sha256": "7fe45bf596a8ef406c08f66b3172cd9f6a27fa9007759124776ce102b24257ab",
+      "verified_projection_sha256": "7fe45bf596a8ef406c08f66b3172cd9f6a27fa9007759124776ce102b24257ab"
+    },
+    "holding_competencies": {
+      "rows": 281,
+      "original_columns": [
+        "code",
+        "title",
+        "category",
+        "importance",
+        "method",
+        "reference"
+      ],
+      "original_projection_sha256": "f87201ce83496e81539e5fbcad5842e7773c722a79b9d61c4de0a95f7b6e292e",
+      "verified_projection_sha256": "f87201ce83496e81539e5fbcad5842e7773c722a79b9d61c4de0a95f7b6e292e"
+    },
+    "instructors": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "name",
+        "specialty",
+        "organization",
+        "qualification",
+        "rate",
+        "contact"
+      ],
+      "original_projection_sha256": "3e679c4527fde613b120f7afb5f900875673b9bc7c68b4f991a7de16eb8aecaa",
+      "verified_projection_sha256": "3e679c4527fde613b120f7afb5f900875673b9bc7c68b4f991a7de16eb8aecaa"
+    },
+    "job_profiles": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "job",
+        "department",
+        "purpose",
+        "supervisor",
+        "duties",
+        "authority",
+        "education",
+        "experience",
+        "legal",
+        "hse",
+        "equipment",
+        "revision",
+        "approved_by",
+        "document_number",
+        "definition",
+        "commitments",
+        "conditions",
+        "performance",
+        "contract_notes",
+        "effective_date",
+        "review_date"
+      ],
+      "original_projection_sha256": "0404e327137e649d09e33846187de35f0fdb637414059a1945c9fdc7e5acb775",
+      "verified_projection_sha256": "0404e327137e649d09e33846187de35f0fdb637414059a1945c9fdc7e5acb775"
+    },
+    "login_attempts": {
+      "rows": 1,
+      "original_columns": [
+        "username",
+        "count",
+        "until"
+      ],
+      "original_projection_sha256": "33c4a9b5bc3f07b46dff3800789d625e7f7674f759871d7a7fa430c3e98fc27b",
+      "verified_projection_sha256": "33c4a9b5bc3f07b46dff3800789d625e7f7674f759871d7a7fa430c3e98fc27b"
+    },
+    "needs": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "skill_id",
+        "department",
+        "reason",
+        "priority",
+        "year",
+        "status",
+        "decision"
+      ],
+      "original_projection_sha256": "fcea1eb5ee136652d3d451a0376d4a4b7500cf4c91bcd23bd6d33d8695702782",
+      "verified_projection_sha256": "fcea1eb5ee136652d3d451a0376d4a4b7500cf4c91bcd23bd6d33d8695702782"
+    },
+    "personal_documents": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "company_id",
+        "overrides",
+        "revision",
+        "updated",
+        "is_snapshot"
+      ],
+      "original_projection_sha256": "e6a05024c87a3c26bb2b45da60bd86e1d0bcb4e74fd2fdedcf250f81c69c7a63",
+      "verified_projection_sha256": "e6a05024c87a3c26bb2b45da60bd86e1d0bcb4e74fd2fdedcf250f81c69c7a63"
+    },
+    "personal_requirements": {
+      "rows": 2,
+      "original_columns": [
+        "employee_id",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "27166bfa2a7f561bd99b4022cbbb4963b85b9517ab24f985c5746e2c9faaec33",
+      "verified_projection_sha256": "27166bfa2a7f561bd99b4022cbbb4963b85b9517ab24f985c5746e2c9faaec33"
+    },
+    "records": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "employee_id",
+        "course_id",
+        "level",
+        "score",
+        "reaction",
+        "behavior",
+        "result"
+      ],
+      "original_projection_sha256": "08442fc982669054dc1856b4117faacd077aea3b22be3731d239073c99f44764",
+      "verified_projection_sha256": "08442fc982669054dc1856b4117faacd077aea3b22be3731d239073c99f44764"
+    },
+    "requirements": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "job",
+        "skill_id",
+        "level"
+      ],
+      "original_projection_sha256": "9485b00207cd9ce9d41f33603c429f044b45fa8168031418f14275af05f1b67b",
+      "verified_projection_sha256": "9485b00207cd9ce9d41f33603c429f044b45fa8168031418f14275af05f1b67b"
+    },
+    "skills": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "company_id",
+        "code",
+        "title",
+        "category",
+        "importance"
+      ],
+      "original_projection_sha256": "bc8ed2aee160481e36b667f51af045cdc84d2641c936adec1e16234619bd316b",
+      "verified_projection_sha256": "bc8ed2aee160481e36b667f51af045cdc84d2641c936adec1e16234619bd316b"
+    },
+    "users": {
+      "rows": 2,
+      "original_columns": [
+        "id",
+        "username",
+        "password",
+        "role",
+        "company_id",
+        "active"
+      ],
+      "original_projection_sha256": "b3d13c1fcb6f0b8a620480388a0d440f117aa5affa5f1b85466e109069adbdbe",
+      "verified_projection_sha256": "b3d13c1fcb6f0b8a620480388a0d440f117aa5affa5f1b85466e109069adbdbe"
+    }
+  },
+  "original_encrypted_tables": {
+    "assessments": 2,
+    "audit": 31,
+    "branding": 1,
+    "certificates": 2,
+    "companies": 6,
+    "company_registry": 1,
+    "competency_links": 2,
+    "course_participants": 2,
+    "courses": 2,
+    "employee_meta": 2,
+    "employees": 2,
+    "holding_catalog_state": 1,
+    "holding_competencies": 281,
+    "instructors": 2,
+    "job_profiles": 2,
+    "login_attempts": 1,
+    "needs": 2,
+    "personal_documents": 2,
+    "personal_requirements": 2,
+    "records": 2,
+    "requirements": 2,
+    "skills": 2,
+    "users": 2
+  },
+  "raw_and_encrypted_pre_upgrade_snapshots_verified": true,
+  "all_18_actual_fields_and_original_reference_aliases_preserved": true,
+  "actual_attendance_and_exact_cost_allocation_preserved": true,
+  "legacy_user_passwords_and_company_isolation_preserved": true,
+  "restart_raw_backup_and_authenticated_old_archive_recovery_passed": true
+}

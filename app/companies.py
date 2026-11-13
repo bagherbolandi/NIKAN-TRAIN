@@ -2,7 +2,7 @@
 
 import json
 
-from flask import g, jsonify, request
+from flask import jsonify, request
 
 from .validation import SQLITE_MAX_INTEGER, json_object, positive_id
 
@@ -58,6 +58,11 @@ def business_references(connection, company_id):
         'records': 'سابقه آموزش', 'job_profiles': 'شناسنامه شغل',
         'employee_meta': 'اطلاعات پرسنلی', 'certificates': 'گواهینامه',
         'instructors': 'مدرس', 'needs': 'نیاز آموزشی', 'personal_documents': 'شناسنامه فردی',
+        'hrm_sites': 'سایت', 'hrm_units': 'واحد',
+        'hrm_employee_details': 'انتساب جاری پرسنل',
+        'hrm_employment_history': 'تاریخچه خدمت',
+        'hrm_temporary_assignments': 'فعالیت موقت',
+        'hrm_user_scopes': 'محدوده دسترسی کاربر',
     }
     found = []
     for (table,) in connection.execute(
@@ -67,10 +72,17 @@ def business_references(connection, company_id):
             continue
         quoted = '"' + table.replace('"', '""') + '"'
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(' + quoted + ')')}
-        if 'company_id' in columns and connection.execute(
-            'SELECT 1 FROM ' + quoted + ' WHERE company_id=? LIMIT 1', (company_id,)
-        ).fetchone():
-            found.append(labels.get(table, 'اطلاعات وابسته'))
+        linked = {column for column in columns if column == 'company_id' or column.endswith('_company_id')}
+        linked.update(row['from'] for row in connection.execute('PRAGMA foreign_key_list(' + quoted + ')')
+                      if row['table'] == 'companies')
+        if linked:
+            predicates = ['"' + column.replace('"', '""') + '"=?' for column in sorted(linked)]
+            exists = connection.execute('SELECT 1 FROM ' + quoted + ' WHERE ' +
+                                        ' OR '.join(predicates) + ' LIMIT 1',
+                                        [company_id] * len(predicates)).fetchone()
+            label = labels.get(table, 'اطلاعات وابسته')
+            if exists and label not in found:
+                found.append(label)
     return found
 
 
@@ -90,7 +102,10 @@ def remove_company_logos(connection, company_id):
 
 def register(app, db, authenticated, audit, error):
     def admin_only():
-        if g.user['role'] != 'admin':
+        # Delegated HRM users can have an adapted legacy training role. Global
+        # organization management always uses the original primary-admin grant.
+        from .hrm_access import ctx
+        if not ctx(db())['is_primary_admin']:
             raise PermissionError()
 
     @app.route('/api/companies', methods=['GET', 'POST'])

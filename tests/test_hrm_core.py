@@ -116,7 +116,7 @@ def test_medical_document_exports_require_the_actual_group_export_grant(core):
 def test_automatic_preupgrade_snapshot_is_verified_and_preserves_facts(core):
     app,_,_,_,eid,root=core
     with sqlite3.connect(app.config['DB']) as conn:
-        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.12'")
+        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.13'")
         expected=conn.execute('SELECT * FROM employees ORDER BY id').fetchall()
     upgraded=create_app(root,True)
     report=upgraded.extensions['hrm_upgrade_backup']
@@ -132,7 +132,7 @@ def test_network_preupgrade_snapshot_is_authenticated_and_old_markers_can_append
     app,_,_,_,_,root=core
     key=secrets.token_bytes(32);(root/'keys').mkdir();(root/'keys/recovery.key').write_bytes(key)
     with sqlite3.connect(app.config['DB']) as conn:
-        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.12'")
+        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.13'")
         expected=conn.execute('SELECT * FROM employees ORDER BY id').fetchall()
     upgraded=create_app(root,True);report=upgraded.extensions['hrm_upgrade_backup']
     assert report['encrypted'] and report['file'].endswith('.nikbak')
@@ -144,3 +144,41 @@ def test_network_preupgrade_snapshot_is_authenticated_and_old_markers_can_append
     with sqlite3.connect(raw) as conn:conn.execute("INSERT INTO hrm_schema_migrations(version) VALUES ('UNSUPPORTED')")
     bad=root/'unsupported.nikbak';encrypt(raw,bad,key)
     with pytest.raises(ValueError):recovery_check(bad,key,root)
+
+
+def test_accord_permissions_are_independent_and_period_references_need_source_read(core):
+    _,admin,h,site,_,_=core
+    created=admin.post('/api/hrm/evaluation_periods?company_id=1',headers=h,json={
+        'company_id':1,'site_id':site,'title':'Scoped accord period','start_date':'2026-11-01',
+        'end_date':'2026-11-30','status':'open','note':'SOURCE-PERFORMANCE-NOTE'})
+    assert created.status_code==201,created.json
+    period=created.json['id']
+    performance_only=account(core,'ordinary-performance',{'performance':{'read':True}})
+    assert performance_only.get('/api/hrm/accord_results?company_id=1').status_code==403
+    assert 'accord_results' not in performance_only.get('/api/hrm/catalog').json
+    creator=account(core,'accord-creator',{'productivity':{'create':True},'performance':{'read':True}})
+    references=creator.get('/api/hrm/options/evaluation_periods?company_id=1&module=productivity&operation=create')
+    assert references.status_code==200,references.json
+    assert any(row['id']==period for row in references.json)
+    assert 'SOURCE-PERFORMANCE-NOTE' not in references.get_data(as_text=True)
+    assert creator.get('/api/hrm/accord_results?company_id=1').status_code==403
+    no_source=account(core,'accord-without-score-source',{'productivity':{'create':True}})
+    assert no_source.get('/api/hrm/options/evaluation_periods?company_id=1&module=productivity&operation=create').status_code==403
+
+
+def test_structure_catalog_write_controls_belong_to_primary_admin(core):
+    app,admin,h,_,_,_=core
+    response=admin.post('/api/hrm/access/users',headers=h,json={
+        'username':'company-personnel-full','password':PASSWORD,'role':'company_hr',
+        'scopes':[{'company_id':1,'site_id':None,'department':''}],
+        'permissions':{'personnel':{'read':True,'create':True,'edit':True,'delete':True,'export':True}},
+        'training_access':False})
+    assert response.status_code==201,response.json
+    local=app.test_client()
+    assert local.post('/api/login',json={'username':'company-personnel-full','password':PASSWORD}).status_code==200
+    schema=local.get('/api/hrm/catalog').json
+    primary=admin.get('/api/hrm/catalog').json
+    for name in ('sites','units'):
+        assert schema[name]['can_read']
+        assert not any(schema[name]['can_'+operation] for operation in ('create','edit','delete','write'))
+        assert all(primary[name]['can_'+operation] for operation in ('create','edit','delete','write'))

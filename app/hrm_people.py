@@ -16,10 +16,13 @@ from . import hrm_access as access
 from .hrm_access import company_scope, ctx, employee, require, scope_sql
 from .hrm_common import (HrmConflict, begin_write, check_version, date_value,
                          integer_value, text_value, today_iso)
-from .validation import json_object, positive_id
+from .validation import SQLITE_MAX_INTEGER, json_object, positive_id
 
 
 SCHEMA = '''
+CREATE TABLE IF NOT EXISTS hrm_org_sequences(
+ kind TEXT PRIMARY KEY CHECK(kind IN ('sites','units')),
+ high_watermark INTEGER NOT NULL CHECK(high_watermark BETWEEN 0 AND 9223372036854775807));
 CREATE TABLE IF NOT EXISTS hrm_sites(
  id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id),
  name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'other', address TEXT NOT NULL DEFAULT '',
@@ -122,6 +125,7 @@ RECOVERY_ADDITIONS = {name: 0 for name in (
     'hrm_units', 'hrm_employee_details', 'hrm_education', 'hrm_prior_employment',
     'hrm_employment_history', 'hrm_contracts', 'hrm_documents', 'hrm_personnel_actions',
     'hrm_sites','hrm_temporary_assignments')}
+RECOVERY_ADDITIONS['hrm_org_sequences'] = 2
 DOCUMENT_GROUPS = ('documents', 'contracts', 'discipline', 'loans', 'performance', 'health', 'hse', 'health_environment')
 PEOPLE_STATUS = [('active', 'شاغل'), ('probation', 'دوره آزمایشی'), ('leave', 'مرخصی بلندمدت'),
                  ('terminated', 'قطع همکاری'), ('retired', 'بازنشسته'), ('settled', 'تسویه‌شده')]
@@ -210,6 +214,9 @@ CATALOG = {
     help='فعالیت موقت شرکت استخدام‌کننده یا سایت انتساب اصلی را تغییر نمی‌دهد. ثبت در شرکت دیگر نیازمند مجوز مبدأ و مقصد است.'),
 }
 
+for _resource in ('sites', 'units'):
+    CATALOG[_resource].update(deletable=True, restorable=False, admin_only_write=True)
+
 DETAIL_FIELDS = ('company_id', 'site_id', 'department', 'job', 'unit_id', 'location', 'manager_id', 'status',
                  'national_id', 'birth_date', 'phone', 'email', 'address', 'start_date', 'end_date',
                  'marital_status', 'emergency_contact', 'notes')
@@ -248,6 +255,54 @@ def _range(values):
 def _body_fields(data, allowed, *, extra=()):
     if set(data) - set(allowed) - set(extra):
         raise ValueError('فیلد ناشناخته یا غیرقابل تغییر ارسال شده است')
+
+
+def _organization_references(conn, resource, rid):
+    """Protect current assignments, historical facts and every declared FK."""
+    target = 'hrm_' + resource
+    suffix = '_site_id' if resource == 'sites' else '_unit_id'
+    direct = 'site_id' if resource == 'sites' else 'unit_id'
+    labels = {
+        'hrm_employee_details': 'انتساب پرسنل', 'hrm_employment_history': 'تاریخچه خدمت',
+        'hrm_user_scopes': 'محدوده دسترسی کاربر', 'hrm_contracts': 'قرارداد',
+        'hrm_documents': 'مدرک', 'hrm_personnel_actions': 'حکم پرسنلی',
+        'hrm_temporary_assignments': 'فعالیت موقت', 'hrm_units': 'واحد سازمانی',
+    }
+    references = []
+    for entry in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall():
+        table = entry['name']
+        quoted = '"' + table.replace('"', '""') + '"'
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(' + quoted + ')')}
+        linked = {column for column in columns if column == direct or column.endswith(suffix)}
+        linked.update(row['from'] for row in conn.execute('PRAGMA foreign_key_list(' + quoted + ')')
+                      if row['table'] == target)
+        if not linked:
+            continue
+        predicate = ' OR '.join('"' + column.replace('"', '""') + '"=?' for column in sorted(linked))
+        if conn.execute('SELECT 1 FROM ' + quoted + ' WHERE ' + predicate + ' LIMIT 1',
+                        [rid] * len(linked)).fetchone():
+            label = labels.get(table, 'سوابق وابسته')
+            if label not in references:
+                references.append(label)
+    return references
+
+
+def _organization_watermark(conn, resource):
+    if resource not in ('sites', 'units'):
+        raise ValueError('نوع ساختار سازمانی معتبر نیست')
+    highest = conn.execute('SELECT COALESCE(MAX(id),0) FROM hrm_' + resource).fetchone()[0]
+    conn.execute('INSERT INTO hrm_org_sequences(kind,high_watermark) VALUES (?,?) '
+                 'ON CONFLICT(kind) DO UPDATE SET high_watermark=MAX(hrm_org_sequences.high_watermark,excluded.high_watermark)',
+                 (resource, highest))
+    return conn.execute('SELECT high_watermark FROM hrm_org_sequences WHERE kind=?', (resource,)).fetchone()[0]
+
+
+def _reserve_organization_id(conn, resource):
+    highest = _organization_watermark(conn, resource)
+    if highest >= SQLITE_MAX_INTEGER:
+        raise HrmConflict('ظرفیت شناسه سایت یا واحد تکمیل شده است')
+    conn.execute('UPDATE hrm_org_sequences SET high_watermark=? WHERE kind=?', (highest + 1, resource))
+    return highest + 1
 
 
 def _scope_company(conn, module, data=None, *, write=False, fallback=None, operation=None):
@@ -487,14 +542,14 @@ def register(app, db, authenticated, audit, error):
         db().execute("CREATE UNIQUE INDEX IF NOT EXISTS hrm_person_national_id ON hrm_employee_details(national_id COLLATE NOCASE) WHERE national_id!=''")
         db().execute('CREATE UNIQUE INDEX IF NOT EXISTS hrm_unit_site_name ON hrm_units(company_id,COALESCE(site_id,0),name)')
         db().execute("UPDATE hrm_employment_history SET start_date=effective_date WHERE start_date=''")
+        for resource in ('sites', 'units'):
+            _organization_watermark(db(), resource)
         db().commit()
     app.extensions.setdefault('hrm_catalog', {}).update(CATALOG)
 
     def configuration_scope(cid, module='personnel'):
         actor = require(db(), module, write=True)
-        if actor.get('is_primary_admin'):
-            return
-        if not any(scope['company_id'] == cid and not scope['department'] and not scope.get('site_id') for scope in actor['scopes']):
+        if not actor.get('is_primary_admin'):
             raise PermissionError()
 
     def own_row(resource, rid, *, write=False, module=None, operation=None):
@@ -606,12 +661,90 @@ def register(app, db, authenticated, audit, error):
         db().execute('UPDATE hrm_personnel_actions SET applied=1,version=version+1 WHERE id=?', (row['id'],))
         audit('hrm_apply_personnel_action', row['company_id'], str(row['id']))
 
+    def roster_people(cid):
+        predicate, parameters = scope_sql(db(), 'personnel', alias='e')
+        query = '''SELECT e.id,e.id employee_id,e.code,e.name,
+            COALESCE(d.company_id,e.company_id) company_id,c.name company_name,
+            d.site_id,s.name site_name,d.unit_id,
+            COALESCE(d.department,e.department) department,COALESCE(d.job,e.job) job,
+            COALESCE(d.location,'') location,COALESCE(d.status,'active') status
+            FROM employees e LEFT JOIN hrm_employee_details d ON d.employee_id=e.id
+            JOIN companies c ON c.id=COALESCE(d.company_id,e.company_id)
+            LEFT JOIN hrm_sites s ON s.id=d.site_id WHERE (''' + predicate + ')'
+        parameters = list(parameters)
+        if cid is not None:
+            query += ' AND COALESCE(d.company_id,e.company_id)=?'
+            parameters.append(cid)
+        return [dict(row) for row in db().execute(query + ' ORDER BY e.name,e.id', parameters)]
+
+    @app.get('/api/hrm/site-roster', endpoint='hrm_site_roster')
+    @authenticated
+    def site_roster():
+        actor = require(db(), 'personnel')
+        cid = _scope_company(db(), 'personnel')
+        selected_site = positive_id(request.args['site_id']) if request.args.get('site_id') not in (None, '') else None
+        as_of = date_value(request.args.get('as_of') or today_iso(), required=True)
+
+        def visible_site(row):
+            return actor['is_primary_admin'] or any(
+                scope['company_id'] == row['company_id'] and
+                (scope.get('site_id') is None or scope['site_id'] == row['id'])
+                for scope in actor['scopes'])
+
+        if selected_site is not None:
+            target = db().execute('SELECT * FROM hrm_sites WHERE id=?', (selected_site,)).fetchone()
+            if target is None:
+                return error('سایت یافت نشد', 404)
+            if not visible_site(target):
+                raise PermissionError()
+            if cid is not None and cid != target['company_id']:
+                raise ValueError('سایت متعلق به شرکت انتخاب‌شده نیست')
+            cid = target['company_id']
+        sites = [dict(row) for row in db().execute('SELECT * FROM hrm_sites ORDER BY company_id,name,id')
+                 if (cid is None or row['company_id'] == cid) and
+                 (selected_site is None or row['id'] == selected_site) and visible_site(row)]
+        visible_ids = {row['id'] for row in sites}
+        current_people = roster_people(cid)
+        people = [row for row in current_people if row['site_id'] in visible_ids]
+        unassigned = [row for row in current_people if row['site_id'] is None]
+
+        # A destination site does not grant access to another company's employee
+        # identity or history. Both the destination and source snapshot must be
+        # visible; primary/authorized cross-company holding users see all visitors.
+        predicate, parameters = access.record_scope_sql(db(), 'personnel', alias='t', department_column='t.department')
+        query = '''SELECT t.id,t.employee_id,e.code employee_code,e.name employee_name,
+            t.company_id,c.name company_name,t.site_id,t.department,
+            t.target_company_id,tc.name target_company_name,t.target_site_id,ts.name target_site_name,
+            t.start_date,t.end_date,t.activity_location,t.status
+            FROM hrm_temporary_assignments t JOIN employees e ON e.id=t.employee_id
+            JOIN companies c ON c.id=t.company_id JOIN companies tc ON tc.id=t.target_company_id
+            JOIN hrm_sites ts ON ts.id=t.target_site_id
+            WHERE t.status='active' AND t.start_date<=? AND t.end_date>=? AND (''' + predicate + ')'
+        temporary = [dict(row) for row in db().execute(query + ' ORDER BY e.name,t.id', [as_of, as_of, *parameters])
+                     if row['target_site_id'] in visible_ids] if visible_ids else []
+        active_statuses = {'active', 'probation', 'leave'}
+        for site in sites:
+            assigned = [row for row in people if row['site_id'] == site['id']]
+            visitors = [row for row in temporary if row['target_site_id'] == site['id']]
+            site.update(employee_count=len(assigned),
+                        active_employee_count=sum(row['status'] in active_statuses for row in assigned),
+                        temporary_assignment_count=len(visitors),
+                        temporary_employee_count=len({row['employee_id'] for row in visitors}))
+        return jsonify(as_of=as_of, company_id=cid, site_id=selected_site,
+                       people_basis='current_assignment', temporary_basis='active_on_as_of',
+                       sites=sites, people=people, temporary_assignments=temporary, unassigned=unassigned,
+                       totals=dict(employees=len(people),
+                                   active_employees=sum(row['status'] in active_statuses for row in people),
+                                   temporary_assignments=len(temporary),
+                                   temporary_employees=len({row['employee_id'] for row in temporary}),
+                                   unassigned=len(unassigned), sites=len(sites)))
+
     @app.route('/api/hrm/people', methods=['GET', 'POST'], endpoint='hrm_people_list')
     @authenticated
     def people():
         module = request.args.get('module', 'personnel') if request.method == 'GET' else 'personnel'
         if module not in ('personnel', 'contracts', 'documents', 'attendance', 'performance', 'discipline',
-                          'loans', 'welfare', 'accommodation', 'training', 'health', 'hse', 'health_environment', 'reports'):
+                          'loans', 'welfare', 'accommodation', 'training', 'health', 'hse', 'health_environment', 'reports', 'productivity'):
             raise ValueError('نوع دسترسی فهرست پرسنل معتبر نیست')
         operation = request.args.get('operation') if request.method == 'GET' else None
         if operation is not None and operation not in ('read','create','edit','export'):
@@ -779,6 +912,9 @@ def register(app, db, authenticated, audit, error):
                 access.record_scope(db(),snapshot,module,write=True)
             columns = ['company_id', *(['employee_id'] if person else []), *values]
             row_values = [cid, *([person['id']] if person else []), *values.values()]
+            if resource in ('sites', 'units'):
+                columns.insert(0, 'id')
+                row_values.insert(0, _reserve_organization_id(db(), resource))
             cursor = db().execute('INSERT INTO hrm_' + resource + ' (' + ','.join(columns) + ') VALUES (' +
                                   ','.join('?' for _ in columns) + ')', row_values)
             rid = cursor.lastrowid
@@ -817,6 +953,8 @@ def register(app, db, authenticated, audit, error):
             values = values_for(resource, data, current=row)
             if resource == 'units' and values['name'] != row['name'] and db().execute('SELECT 1 FROM hrm_employee_details WHERE unit_id=? LIMIT 1', (rid,)).fetchone():
                 raise HrmConflict('نام واحد دارای پرسنل برای حفظ دسترسی واحدی تغییر نمی‌کند؛ واحد جدید تعریف و جابه‌جایی ثبت کنید')
+            if resource == 'units' and values['site_id'] != row['site_id'] and _organization_references(db(), 'units', rid):
+                raise HrmConflict('سایت واحد دارای انتساب یا سابقه قابل تغییر نیست؛ واحد مقصد و جابه‌جایی جدا ثبت کنید')
             person = dict(id=row['employee_id'],department=row['record_department'] if resource=='personnel_actions' else row['department']) if 'employee_id' in row.keys() else None
             related_keys = {'manager_id','unit_id','target_company_id','target_site_id','document_id','site_id','department','job','location'}
             if resource in ('sites','units') or any(key in data and data[key] != row[key] for key in related_keys if key in row.keys()):
@@ -828,6 +966,29 @@ def register(app, db, authenticated, audit, error):
             audit('hrm_update_' + resource, row['company_id'], str(rid))
         updated = db().execute('SELECT * FROM hrm_' + resource + ' WHERE id=?', (rid,)).fetchone()
         return jsonify(_contract_extras(db(), updated) if resource == 'contracts' else dict(updated))
+
+    @app.delete('/api/hrm/sites/<int:rid>', defaults={'resource': 'sites'}, endpoint='hrm_delete_site')
+    @app.delete('/api/hrm/units/<int:rid>', defaults={'resource': 'units'}, endpoint='hrm_delete_unit')
+    @authenticated
+    def delete_organization_resource(resource, rid):
+        configuration_scope(None)
+        data = json_object()
+        _body_fields(data, (), extra=('version',))
+        with begin_write(db()):
+            row = own_row(resource, rid, write=True, operation='delete')
+            if row is None:
+                return error('سایت یا واحد یافت نشد', 404)
+            check_version(data, row)
+            references = _organization_references(db(), resource, row['id'])
+            if references:
+                title = 'سایت' if resource == 'sites' else 'واحد'
+                raise HrmConflict('حذف ' + title + ' دارای ' + '، '.join(references) +
+                                  ' مجاز نیست؛ انتساب‌ها و سوابق باید حفظ شوند')
+            _organization_watermark(db(), resource)
+            db().execute('DELETE FROM hrm_' + resource + ' WHERE id=?', (row['id'],))
+            audit('hrm_delete_' + resource, row['company_id'],
+                  json.dumps(dict(row), ensure_ascii=False))
+        return jsonify(ok=True)
 
     @app.post('/api/hrm/contracts/<int:rid>/renew', endpoint='hrm_people_renew_contract')
     @authenticated

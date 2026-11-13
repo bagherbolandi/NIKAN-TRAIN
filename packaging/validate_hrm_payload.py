@@ -170,6 +170,79 @@ def validate(installation):
                     assert all(value in content for value in actual.values())
         checks.append('legacy shared training, actual-headcount exact-rial cost allocation and full/annex Word runtime dependencies')
 
+        # Organization changes must retain linked records and retired identifiers.
+        empty_site = write('hrm/sites?company_id=1', {'name': 'Synthetic disposable site', 'kind': 'factory'})
+        write(f'hrm/sites/{empty_site["id"]}?company_id=1', {'version': empty_site['version']}, method='delete')
+        replacement_site = write('hrm/sites?company_id=1', {'name': 'Synthetic replacement site', 'kind': 'factory'})
+        assert replacement_site['id'] > empty_site['id']
+        write(f'hrm/sites/{replacement_site["id"]}?company_id=1', {'version': replacement_site['version']}, method='delete')
+        linked_site = next(row for row in admin.get('/api/hrm/sites?company_id=1').json if row['id'] == second_site)
+        assert admin.delete(f'/api/hrm/sites/{second_site}?company_id=1', headers=headers,
+                            json={'version': linked_site['version']}).status_code == 409
+        roster_a = admin.get(f'/api/hrm/site-roster?company_id=1&site_id={first_site}')
+        roster_b = admin.get(f'/api/hrm/site-roster?company_id=1&site_id={second_site}')
+        assert roster_a.status_code == roster_b.status_code == 200
+        assert {row['id'] for row in roster_a.json['people']} == {staff[2]['id']}
+        assert {row['id'] for row in roster_b.json['people']} == {first}
+        assert roster_b.json['totals']['employees'] == 1 and roster_b.json['temporary_assignments'] == []
+        checks.append('admin site deletion preserves linked history, never reuses retired IDs and shows current site membership after transfer')
+
+        period = write('hrm/evaluation_periods?company_id=1', {
+            'company_id': 1, 'site_id': second_site, 'title': 'Synthetic productivity period',
+            'start_date': iso, 'end_date': (today + timedelta(days=30)).isoformat(), 'status': 'open'})
+        policy = write('hrm/accord_policies?company_id=1', {
+            'company_id': 1, 'site_id': second_site, 'period_id': period['id'],
+            'title': 'Synthetic management accord', 'method': 'individual_base',
+            'minimum_score': 0, 'note': 'Synthetic approved calculation basis'})
+        seeded = write(f'hrm/accord_policies/{policy["id"]}/seed-criteria?company_id=1', {'version': policy['version']})
+        assert seeded['criteria_count'] == 8
+        criteria = [row for row in admin.get('/api/hrm/performance_criteria?company_id=1').json
+                    if row['period_id'] == period['id']]
+        assert len(criteria) == 8 and sum(row['weight'] for row in criteria) == 100
+        for criterion in criteria:
+            write('hrm/performance_scores?company_id=1', {
+                'employee_id': first, 'period_id': period['id'], 'criterion_id': criterion['id'],
+                'score': 80, 'note': 'Synthetic measurable performance evidence'})
+        entry = write('hrm/accord_entries?company_id=1', {
+            'policy_id': policy['id'], 'employee_id': first, 'base_rials': 1_000_001,
+            'scheduled_minutes': 480, 'actual_minutes': 360,
+            'note': 'Synthetic confirmed participation; no automatic medical or leave penalty'})
+        preview_path = f'/api/hrm/accord_report?company_id=1&policy_id={policy["id"]}'
+        preview = admin.get(preview_path)
+        assert preview.status_code == 200, preview.json
+        assert len(preview.json['rows']) == 1
+        calculated = preview.json['rows'][0]
+        assert calculated['score_percent'] == 80 and calculated['participation_percent'] == 75
+        assert calculated['is_complete'] and calculated['accord_rials'] == 600_001
+        assert not preview.json['can_finalize']  # The review period remains open.
+        current_period = admin.get(f'/api/hrm/evaluation_periods/{period["id"]}?company_id=1')
+        assert current_period.status_code == 200, current_period.json
+        write(f'hrm/evaluation_periods/{period["id"]}?company_id=1',
+              {'version': current_period.json['version'], 'status': 'closed'}, method='put')
+        reviewed = admin.get(preview_path)
+        assert reviewed.status_code == 200 and reviewed.json['can_finalize']
+        finalized = write(f'hrm/accord_policies/{policy["id"]}/finalize?company_id=1', {
+            'version': reviewed.json['policy']['version'], 'calculation_token': reviewed.json['calculation_token']})
+        assert finalized['status'] == 'finalized' and len(finalized['rows']) == 1
+        accord_result = finalized['rows'][0]
+        assert accord_result['employee_id'] == first and accord_result['site_id'] == second_site
+        assert accord_result['accord_rials'] == 600_001 and accord_result['locked']
+        assert admin.put(f'/api/hrm/accord_entries/{entry["id"]}?company_id=1', headers=headers,
+                         json={'version': entry['version'], 'base_rials': 2_000_000}).status_code == 409
+        _, performance_viewer, _ = new_user('synthetic-performance-no-money',
+                                            {'performance': {'read': True}}, site=second_site)
+        assert performance_viewer.get('/api/hrm/accord_results?company_id=1').status_code == 403
+        _, accord_viewer, accord_headers = new_user('synthetic-accord-reader',
+            {'productivity': {'read': True, 'export': True}}, site=second_site)
+        visible_results = accord_viewer.get('/api/hrm/accord_results?company_id=1')
+        assert visible_results.status_code == 200 and len(visible_results.json) == 1
+        assert visible_results.json[0]['accord_rials'] == 600_001
+        assert accord_viewer.put(f'/api/hrm/accord_entries/{entry["id"]}?company_id=1', headers=accord_headers,
+                                json={'version': entry['version'], 'actual_minutes': 480}).status_code == 403
+        accord_excel = accord_viewer.get('/api/hrm/reports/accord_results.xlsx?company_id=1')
+        assert accord_excel.status_code == 200 and accord_excel.data.startswith(b'PK')
+        checks.append('canonical eight-item weighted accord, exact-rial participation, explicit financial grants, closed-period finalization and immutable result')
+
         backup = admin.post('/api/backup', headers=headers)
         assert backup.status_code == 200 and backup.data.startswith(b'SQLite format 3')
         restored = folder / 'restored';restored.mkdir()
@@ -179,13 +252,17 @@ def validate(installation):
         assert restored_admin.post('/api/login', json={'username': 'hrm-payload-admin', 'password': password}).status_code == 200
         assert restored_admin.get(f'/api/hrm/documents/{document_id}/file').data == pdf
         assert restored_admin.get(f'/api/courses/{course}/cost-allocation').json == allocation
+        restored_results = restored_admin.get('/api/hrm/accord_results?company_id=1')
+        assert restored_results.status_code == 200 and restored_results.json == [accord_result]
+        restored_policy = restored_admin.get(f'/api/hrm/accord_policies/{policy["id"]}?company_id=1')
+        assert restored_policy.status_code == 200 and restored_policy.json['status'] == 'finalized'
         with closing(sqlite3.connect(restored_app.config['DB'])) as connection:
             assert connection.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
             assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
             assert connection.execute('SELECT count(*) FROM employees').fetchone()[0] == len(staff)
             assert connection.execute('SELECT count(*) FROM hrm_employee_details').fetchone()[0] == len(staff)
             assert connection.execute('SELECT sum(attended) FROM course_participants').fetchone()[0] == len(staff)
-        checks.append('raw backup/restart preserves central identities, original confidential BLOB and actual attendance/cost')
+        checks.append('raw backup/restart preserves central identities, confidential BLOB, actual attendance/cost and exact finalized accord evidence')
     return dict(passed=True, installation=str(installation), platform=sys.platform,
                 python=sys.version.split()[0], checks=checks,
                 synthetic_attachment_sha256=hashlib.sha256(pdf).hexdigest(),

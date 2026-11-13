@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "source_versions": [
+    "0.10",
+    "0.11.2",
+    "0.12.1"
+  ],
+  "tests": [
+    {
+      "name": "test_upgrade_0121_preserves_existing_hrm_facts_and_migration_timestamps",
+      "passed": true,
+      "time_seconds": "1.109"
+    },
+    {
+      "name": "test_actual_old_source_upgrade_preserves_all_original_columns_and_verified_backups[0.10]",
+      "passed": true,
+      "time_seconds": "2.510"
+    },
+    {
+      "name": "test_actual_old_source_upgrade_preserves_all_original_columns_and_verified_backups[0.11.2]",
+      "passed": true,
+      "time_seconds": "2.494"
+    }
+  ]
+}

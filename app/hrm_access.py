@@ -21,14 +21,14 @@ ROLES = {
 MODULES = {
     'personnel': 'پرونده پرسنلی', 'contracts': 'قراردادها و کارگزینی',
     'documents': 'مدارک استخدامی', 'attendance': 'حضور و غیاب',
-    'performance': 'ارزیابی عملکرد', 'discipline': 'تشویق و انضباط',
+    'performance': 'ارزیابی عملکرد', 'productivity': 'آکورد بهره‌وری', 'discipline': 'تشویق و انضباط',
     'loans': 'وام‌ها و تسهیلات', 'welfare': 'خدمات رفاهی',
     'accommodation': 'رزرو اقامتگاه', 'hse': 'ایمنی و حوادث',
     'health_environment': 'بهداشت و محیط زیست', 'health': 'سلامت شغلی محرمانه',
     'training': 'آموزش و توسعه', 'reports': 'داشبورد و گزارش‌ها',
     'backup.full_export': 'خروجی کامل و کلید بازیابی', 'settings': 'تنظیمات منابع انسانی',
 }
-CONFIDENTIAL = frozenset({'contracts', 'documents', 'discipline', 'loans', 'health', 'backup.full_export'})
+CONFIDENTIAL = frozenset({'contracts', 'documents', 'discipline', 'loans', 'health', 'productivity', 'backup.full_export'})
 MIGRATION_VERSION = 'hrm-1'
 ACCESS_DDL = """CREATE TABLE {name}(
  user_id INTEGER PRIMARY KEY REFERENCES users(id),role TEXT NOT NULL,
@@ -51,7 +51,7 @@ PERMISSIONS_DDL = """CREATE TABLE {name}(
 OPERATIONS = ('read', 'create', 'edit', 'delete', 'export')
 ALL_COMPANY_ROLES = frozenset({'system_admin','holding_manager','holding_hr','training_officer','hse_officer','executive'})
 RECOVERY_ADDITIONS = {'hrm_user_access': 0, 'hrm_user_scopes': 0,
-                      'hrm_user_permissions': 0, 'hrm_schema_migrations': 2}
+                      'hrm_user_permissions': 0, 'hrm_schema_migrations': 3}
 
 
 def initialize(conn):

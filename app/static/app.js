@@ -59,7 +59,7 @@ async function renderCurrent(){
  try{await render();if(version===navigationVersion&&user)updateCompanyAvailability();return version===navigationVersion&&!!user}catch(err){navigationFailure(err,version);if(version===navigationVersion&&user)updateCompanyAvailability();return false}
 }
 async function navigateTo(nextPage,nextCompany=cid){
- if(!user||$('#entry').dataset.busy||(typeof workspaceSaving!=='undefined'&&workspaceSaving))return;const nextId=nextCompany===null||nextCompany===undefined?null:Number(nextCompany),changedCompany=nextId!==cid;page=nextPage;cid=nextId;if(changedCompany){cache={};editId=null;userReset=null}
+ if(!user||$('#entry').dataset.busy||(typeof workspaceSaving!=='undefined'&&workspaceSaving))return;const nextId=nextCompany===null||nextCompany===undefined?null:Number(nextCompany),changedCompany=nextId!==cid;page=nextPage;cid=nextId;if(changedCompany){cache={};editId=null;userReset=null;if(user.companies.some(company=>Number(company.id)===nextId))setCompanyChoices(user.companies,nextId)}
  return renderCurrent();
 }
 function drawNavigation(){

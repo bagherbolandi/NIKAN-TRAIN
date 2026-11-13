@@ -11,7 +11,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.12.1'
+VERSION = '0.13.0'
 ARCHIVE_ROOT = f'NikanHRM-{VERSION}'
 INSTALLERS = (
     'NikanHRM-Test-Setup.exe',
@@ -138,6 +138,6 @@ def build(root=ROOT, output=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, help='Override distribution/NikanHRM-0.12.1-Source.zip')
+    parser.add_argument('--output', type=Path, help='Override distribution/NikanHRM-0.13.0-Source.zip')
     arguments = parser.parse_args()
     build(output=arguments.output)

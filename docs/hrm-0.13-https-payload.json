@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "installation": "/workspace/nikan-build-tools/extracted-hrm-server",
+  "checks": [
+    "verified HTTPS with matching trusted certificate",
+    "16 concurrent authenticated writes",
+    "legacy calendar/bank/company scopes",
+    "Excel preview and atomic import",
+    "short personal passport and full/A4 Word exports",
+    "exact-rial actual attendance allocation",
+    "encrypted backup, recovery and active-server protection"
+  ]
+}

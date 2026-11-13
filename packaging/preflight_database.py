@@ -21,7 +21,7 @@ def snapshot(root):
             raise ValueError('Existing database has invalid references. Installation stopped.')
         folder=root/'pre-upgrade-backups';folder.mkdir(exist_ok=True,mode=0o700)
         stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-        target=folder/('before-files-0.12-'+stamp+'-'+secrets.token_hex(4)+'.sqlite3')
+        target=folder/('before-files-0.13-'+stamp+'-'+secrets.token_hex(4)+'.sqlite3')
         target.touch(exist_ok=False,mode=0o600)
         destination=sqlite3.connect(target)
         try:

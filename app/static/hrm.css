@@ -61,3 +61,37 @@
 @media(max-width:600px){.hrm-filter-grid,.hrm-scope-row{grid-template-columns:minmax(0,1fr)}.hrm-filters{padding:14px}.hrm-toolbar>div{display:flex;flex-wrap:wrap;gap:6px}.hrm-row-actions{min-width:120px}.hrm-permission-table input[type=checkbox]{width:22px;height:22px}}
 .hrm-archive-filter { margin:14px 0; }
 .hrm-archive-filter input { width:auto; }
+.hrm-section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; flex-wrap:wrap; }
+.hrm-section-heading > div:first-child { flex:1 1 320px; min-width:0; }
+.hrm-action-group { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.hrm-section-heading .hrm-action-group { flex:0 1 auto; }
+.hrm-roster-filter { display:flex; flex-wrap:wrap; gap:16px; align-items:end; }
+.hrm-roster-filter label { flex:1 1 260px; min-width:0; margin:0; }
+.hrm-roster-filter input,.hrm-roster-filter select { width:100%; min-width:0; }
+.hrm-structure-metrics { margin:20px 0; }
+.hrm-structure-metrics .card strong { font-size:27px; }
+#hrm-roster-current,#hrm-roster-temporary { scroll-margin-top:20px; }
+.hrm-workflow-steps { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:18px 0; }
+.hrm-workflow-steps > span { border:1px solid var(--line,#dfe6ef); padding:10px 13px; border-radius:9px; color:var(--muted,#61718a); background:var(--bg,#f3f6fa); font-size:13px; }
+.hrm-accord-formula { background:var(--blue-soft,#edf3ff); border-inline-start:3px solid var(--blue,#235dcc); padding:15px 18px; line-height:2; border-radius:8px; }
+.hrm-accord-blockers { background:#fff8e9; border:1px solid #f0dfba; border-radius:10px; padding:15px 18px; margin:18px 0; }
+.hrm-accord-blockers h3 { margin-top:0; }
+.hrm-accord-blockers ul { margin-bottom:0; line-height:1.9; }
+.hrm-accord-metrics { margin-bottom:0; }
+.hrm-accord-metrics .card strong { font-size:23px; overflow-wrap:anywhere; }
+.hrm-accord-table { min-width:1040px; }
+.hrm-accord-table details { min-width:150px; margin-top:9px; }
+.hrm-accord-table details[open] { min-width:340px; }
+.hrm-accord-table summary { color:var(--blue,#235dcc); font-size:12px; cursor:pointer; }
+.hrm-cell-meta { display:block; margin-top:6px; color:var(--muted,#61718a); font-size:11px; line-height:1.8; }
+.hrm-accord-amount { font-weight:700; white-space:nowrap; }
+@media(max-width:760px) {
+ .hrm-section-heading { gap:12px; }
+ .hrm-section-heading > div:first-child { flex-basis:100%; }
+ .hrm-section-heading .hrm-action-group { width:100%; }
+ .hrm-roster-filter { align-items:stretch; }
+ .hrm-roster-filter label { flex-basis:100%; }
+ .hrm-workflow-steps { align-items:stretch; }
+ .hrm-workflow-steps > * { flex:1 1 170px; }
+ .hrm-accord-metrics .card strong { font-size:20px; }
+}

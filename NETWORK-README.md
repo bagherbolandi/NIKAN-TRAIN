@@ -1,4 +1,4 @@
-# نصب و نگهداری سرور نیکان HRM — ۰٫۱۲
+# نصب و نگهداری سرور نیکان HRM — ۰٫۱۳
 
 سامانه برای مسئولان اداری، آموزش، ایمنی و بهداشت و محیط‌زیست است؛ ورود یا درخواست کارکنان ندارد. ادمین اصلی به همه بخش‌ها دسترسی دارد و محدوده و عملیات سایر مدیران را تعریف می‌کند. امکانات و بسته‌ها در [README.md](README.md) و شواهد اجرا در [VALIDATION.md](VALIDATION.md) آمده‌اند.
 
@@ -6,10 +6,10 @@
 
 مخزن خصوصی است؛ ابتدا در github.com با حساب دارای دسترسی وارد شوید. در صفحه فایل در صورت نیاز **Download raw file** را بزنید:
 
-- [نصاب سرور ۰٫۱۲](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Server-Setup.exe?raw=true)
-- [نصاب میانبر کلاینت](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
-- [نصاب آزمایشی مستقل](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Test-Setup.exe?raw=true)
-- [سورس و بسته‌ها](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-0.12.1-Source.zip?raw=true)
+- [نصاب سرور ۰٫۱۳](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.13.0/distribution/NikanHRM-Server-Setup.exe?raw=true)
+- [نصاب میانبر کلاینت](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.13.0/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
+- [نصاب آزمایشی مستقل](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.13.0/distribution/NikanHRM-Test-Setup.exe?raw=true)
+- [سورس و بسته‌ها](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.13.0/distribution/NikanHRM-0.13.0-Source.zip?raw=true)
 
 ۱. میزبان همیشه روشن x64 با Windows Server 2016 به بعد یا Windows 10/11، دیسک محلی و نام DNS معتبر در شبکه انتخاب کنید. نصاب سرور را با حساب مدیر Windows اجرا و نام میزبان، پورت (پیش‌فرض 8766) و در صورت نیاز مسیر دوم پشتیبان را وارد کنید. Python و وابستگی‌ها همراه نصاب هستند.
 
@@ -59,4 +59,4 @@ certutil -user -addstore Root Nikan-Server.cer
 
 ## شواهد نصب
 
-ساخت و استخراج EXE، اجرای واقعی نصب در Windows نیست. وضعیت همین نسخه در [گزارش جاری](docs/validation-0.12.md) ثبت می‌شود؛ شواهد تاریخی [شبکه ۰٫۱۰](docs/NETWORK-training-0.10.md) مربوط به همان نسخه‌اند.
+ساخت و استخراج EXE، اجرای واقعی نصب در Windows نیست. وضعیت همین نسخه در [گزارش جاری](docs/validation-0.13.md) ثبت می‌شود؛ شواهد تاریخی [شبکه ۰٫۱۰](docs/NETWORK-training-0.10.md) مربوط به همان نسخه‌اند.
