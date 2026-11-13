@@ -470,3 +470,36 @@ def test_archived_foreign_site_rows_cannot_be_read_or_restored(workforce):
     assert cb.get('/api/hrm/attendance?include_deleted=1').json == []
     assert cb.post(path + '/restore', headers=hb, json={'version': 2}).status_code == 403
     assert ca.post(path + '/restore', headers=ha, json={'version': 2}).status_code == 200
+
+
+def test_frontend_date_aliases_filter_attendance_and_trends_without_shortening_annual_balance(workforce):
+    e = workforce
+    eid = e['employees'][0]
+    post(e, 'attendance_policies', dict(company_id=1, year=1405, title='سهمیه مصوب', annual_leave_minutes=600))
+    for day, kind, minutes in [('1405/01/05', 'work', 480), ('1405/01/05', 'leave', 120),
+                               ('1405/04/05', 'work', 420), ('1405/04/05', 'leave', 180)]:
+        post(e, 'attendance', dict(employee_id=eid, work_date=day, kind=kind, minutes=minutes))
+    first_period = period(e, title='دوره زمستان', start_date='1405/01/01', end_date='1405/01/31')
+    next_period = period(e, title='دوره تابستان', start_date='1405/04/01', end_date='1405/04/31')
+    for term, score in ((first_period, 5), (next_period, 9)):
+        metric = criterion(e, term)
+        post(e, 'performance_scores', dict(employee_id=eid, period_id=term['id'], criterion_id=metric['id'], score=score))
+    filters = 'company_id=1&from_date=1405/04/01&to_date=1405/04/31'
+    response = e['hr'].get('/api/hrm/attendance?' + filters)
+    assert response.status_code == 200, response.json
+    assert {row['work_date'] for row in response.json} == {date_value('1405/04/05')}
+    old_aliases = e['hr'].get('/api/hrm/attendance?company_id=1&from=1405/04/01&to=1405/04/31')
+    assert old_aliases.json == response.json
+    before_audit = audit_count(e)
+    report = e['hr'].get('/api/hrm/workforce_report?' + filters)
+    assert report.status_code == 200, report.json
+    assert report.json['attendance'][0]['work_minutes'] == 420
+    assert report.json['attendance'][0]['leave_minutes'] == 180
+    balance = next(row for row in report.json['leave_balances'] if row['employee_id'] == eid)
+    assert balance['recorded_leave_minutes'] == 300 and balance['remaining_minutes'] == 300
+    assert [row['period_id'] for row in report.json['performance']] == [next_period['id']]
+    assert report.json['performance'][0]['score_percent'] == 90
+    assert audit_count(e) == before_audit
+    for endpoint in ('attendance', 'workforce_report'):
+        assert e['hr'].get('/api/hrm/' + endpoint + '?from_date=1405/05/01&to_date=1405/04/01').status_code == 400
+        assert e['hr'].get('/api/hrm/' + endpoint + '?from_date=1405/04/01&from=1405/01/01').status_code == 400

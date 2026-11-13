@@ -159,6 +159,9 @@ CATALOG = {
     ], columns=['employee_name', 'property_name', 'start_date', 'end_date', 'nights', 'guests', 'status']),
 }
 
+for definition in CATALOG.values():
+    definition.update(deletable=True, restorable=False)
+
 TABLES = {key: 'hrm_' + key for key in CATALOG}
 CATALOG_RESOURCES = {'welfare_services', 'properties'}
 DEFAULTS = {
@@ -376,10 +379,11 @@ def _save(conn, resource, values, previous=None):
     return cursor.lastrowid
 
 
-def _query_rows(conn, resource):
+def _query_rows(conn, resource, include_deleted=False):
     table = TABLES[resource]
+    active = '1' if include_deleted else 'r.deleted=0'
     if resource in CATALOG_RESOURCES:
-        return [dict(row) for row in conn.execute(f'SELECT r.*,c.name company_name,s.name site_name FROM {table} r JOIN companies c ON c.id=r.company_id LEFT JOIN hrm_sites s ON s.id=r.site_id WHERE r.deleted=0 ORDER BY r.name,r.id')]
+        return [dict(row, is_deleted=row['deleted']) for row in conn.execute(f'SELECT r.*,c.name company_name,s.name site_name FROM {table} r JOIN companies c ON c.id=r.company_id LEFT JOIN hrm_sites s ON s.id=r.site_id WHERE {active} ORDER BY r.name,r.id')]
     scope, params = record_scope_sql(conn, CATALOG[resource]['module'], alias='r', department_column='r.department')
     extras = ''
     join = ''
@@ -391,7 +395,7 @@ def _query_rows(conn, resource):
         extras = ',s.name service_name'; join = ' JOIN hrm_welfare_services s ON s.id=r.service_id'
     elif resource == 'reservations':
         extras = ',p.name property_name'; join = ' JOIN hrm_properties p ON p.id=r.property_id'
-    rows = [dict(row) for row in conn.execute(f'SELECT r.*,e.name employee_name,e.code employee_code,c.name company_name,ss.name site_name{extras} FROM {table} r JOIN employees e ON e.id=r.employee_id JOIN companies c ON c.id=r.company_id LEFT JOIN hrm_sites ss ON ss.id=r.site_id{join} WHERE ({scope}) AND r.deleted=0 ORDER BY r.id DESC', params)]
+    rows = [dict(row, is_deleted=row['deleted']) for row in conn.execute(f'SELECT r.*,e.name employee_name,e.code employee_code,c.name company_name,ss.name site_name{extras} FROM {table} r JOIN employees e ON e.id=r.employee_id JOIN companies c ON c.id=r.company_id LEFT JOIN hrm_sites ss ON ss.id=r.site_id{join} WHERE ({scope}) AND ({active}) ORDER BY r.id DESC', params)]
     today = datetime.now(timezone(timedelta(hours=3, minutes=30))).date().isoformat()
     for row in rows:
         if resource == 'loans':
@@ -480,8 +484,13 @@ def register(app, db, authenticated, audit, error):
             if eid is not None:
                 eid = positive_id(eid)
             query = text_value(request.args.get('q', ''), max_length=240).casefold()
+            # Only the explicit management list can request its scoped archive.
+            # Reusing this listing inside reports/options must never reinsert
+            # archived liabilities or cancelled reservations into active totals.
+            include_deleted = (request.path == '/api/hrm/' + resource and
+                               request.args.get('include_deleted') == '1')
             rows = []
-            for row in _query_rows(conn, resource):
+            for row in _query_rows(conn, resource, include_deleted=include_deleted):
                 if cid is not None and row['company_id'] != cid and not (resource in CATALOG_RESOURCES and row['shared']):
                     continue
                 if sid is not None and row['site_id'] != sid and not (resource in CATALOG_RESOURCES and (row['shared'] or row['site_id'] is None)):

@@ -5,11 +5,11 @@ their canonical IDs. Only scope/date/version metadata and configurable general
 training policies are additive. No historical personnel or grade is rewritten
 when this module is initialized.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 import math
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 from . import hrm_access as access
 from .catalog import attach
@@ -79,7 +79,13 @@ CATALOG = {
     'training_assessments': dict(title='ارزیابی فعلی شایستگی کارکنان', module='training', fields=[
         PERSON, BANK, LEVEL, field('assessment_date', 'تاریخ ارزیابی', 'date', required=True),
     ], columns=['employee_name', 'competency_title', 'site_name', 'department', 'assessment_date', 'level']),
-    'training_assessment_history': dict(title='تاریخچه نسخه‌های ارزیابی شایستگی', module='training', read_only=True, fields=[],
+    'training_assessment_history': dict(title='تاریخچه نسخه‌های ارزیابی شایستگی', module='training', read_only=True, fields=[
+        field('employee_name', 'نام و نام خانوادگی'), field('competency_title', 'شایستگی'),
+        field('company_name', 'شرکت ثبت‌کننده'), field('site_name', 'سایت ثبت‌کننده'), field('department', 'واحد ثبت‌کننده'),
+        field('assessment_date', 'تاریخ ارزیابی', 'date'), field('level', 'سطح شایستگی نسخه قبلی', 'number'),
+        field('version', 'نسخه', 'number'), field('change_kind', 'نوع تغییر', 'select', choices=[
+            ['reevaluated_after_transfer', 'ارزیابی جدید پس از جابه‌جایی'], ['edited', 'اصلاح ارزیابی'], ['voided', 'ابطال ارزیابی']]),
+    ],
         columns=['employee_name', 'competency_title', 'company_name', 'site_name', 'department', 'assessment_date', 'level', 'version', 'change_kind']),
     'training_requirements': dict(title='الزامات عمومی، بدو استخدام و تجدید آموزش', module='training', fields=[
         COMPANY, SITE, field('department', 'واحد (خالی: همه واحدها)'), field('job', 'شغل (خالی: همه شغل‌ها)'),
@@ -312,7 +318,8 @@ def _append_assessment_history(conn, previous, change_kind):
     history = json.loads(context['history_json']) if context else []
     item = {key: previous.get(key) for key in ('company_id', 'site_id', 'department', 'employee_id',
             'employee_name', 'competency_code', 'competency_title', 'level', 'version', 'date_iso', 'is_deleted')}
-    item.update(assessment_id=previous['id'], assessment_date=previous.get('date_iso', ''), change_kind=change_kind)
+    item.update(assessment_id=previous['id'], assessment_date=previous.get('date_iso', ''), change_kind=change_kind,
+                changed_by=g.user['id'], changed_at=datetime.now(timezone.utc).isoformat())
     history.append(item)
     encoded = json.dumps(history, ensure_ascii=False, separators=(',', ':'))
     if context:
@@ -463,7 +470,8 @@ def _save_record(conn, data, previous=None):
     for key, minimum, maximum in (('score', 0, 100), ('reaction', 1, 5), ('behavior', 1, 5), ('result', 0, 100)):
         raw = values.get(key)
         fields[key] = None if raw in (None, '') else number(raw, minimum=minimum, maximum=maximum)
-    iso = date_value(values.get('record_date') or course['date_iso'], required=True)
+    supplied_date = values.get('record_date')
+    iso = date_value(course['date_iso'] if supplied_date in (None, '') else supplied_date, required=True)
     if previous:
         conn.execute('UPDATE records SET level=?,score=?,reaction=?,behavior=?,result=? WHERE id=?',
                      (fields['level'], fields['score'], fields['reaction'], fields['behavior'], fields['result'], previous['id']))
@@ -501,6 +509,10 @@ def _save_assessment(conn, data, previous=None):
                 raise HrmConflict('ارزیابی فعلی این شایستگی موجود است؛ همان رکورد را با نسخه معتبر ویرایش کنید')
             if old['date_iso'] and iso < old['date_iso']:
                 raise HrmConflict('ارزیابی جدید پس از انتقال نمی‌تواند تاریخ قدیمی‌تر از نسخه فعلی داشته باشد')
+            assignment = conn.execute("SELECT start_date FROM hrm_employment_history WHERE employee_id=? AND company_id=? AND site_id IS ? AND department=? AND end_date='' AND source!='manual' ORDER BY id DESC LIMIT 1",
+                                      (eid, owner['company_id'], owner['site_id'], owner['department'])).fetchone()
+            if assignment and assignment['start_date'] and iso < assignment['start_date']:
+                raise HrmConflict('ارزیابی سایت جدید نمی‌تواند پیش از تاریخ شروع انتساب ثبت‌شده آن سایت باشد')
             _append_assessment_history(conn, old, 'reevaluated_after_transfer')
             rid = old['id']
             conn.execute('UPDATE assessments SET level=? WHERE id=?', (level, rid))

@@ -188,14 +188,23 @@ def _row_access(conn, resource, row, write=False, operation=None):
             raise PermissionError()
 
 
-def _filter_dates(args):
-    filters = []
-    for key, operator in (('from', '>='), ('to', '<=')):
-        if args.get(key):
-            filters.append(('work_date', operator, date_value(args[key], required=True)))
-    if len(filters) == 2 and filters[0][2] > filters[1][2]:
+def _date_bounds(args):
+    """Accept the UI's filter names and the original API aliases consistently."""
+    values = []
+    for current, legacy in (('from_date', 'from'), ('to_date', 'to')):
+        supplied = [date_value(args[key], required=True) for key in (current, legacy) if args.get(key)]
+        if len(set(supplied)) > 1:
+            raise ValueError('نام‌های جایگزین تاریخ، مقادیر متفاوت دارند')
+        values.append(supplied[0] if supplied else '')
+    start, end = values
+    if start and end and start > end:
         raise ValueError('بازه تاریخ معتبر نیست')
-    return filters
+    return start, end
+
+
+def _filter_dates(args):
+    start, end = _date_bounds(args)
+    return [('work_date', operator, value) for operator, value in (('>=', start), ('<=', end)) if value]
 
 
 def _list_rows(conn, resource, args):
@@ -333,7 +342,14 @@ def _validated(conn, resource, body, previous=None, operation=None):
 
 
 def _report(conn, args):
-    args = {key:value for key,value in args.items() if key != 'include_deleted'}
+    start, end = _date_bounds(args)
+    # Canonicalize once so annual balances can remove both bounds without
+    # accidentally retaining the frontend aliases and counting only a month.
+    args = {key:value for key,value in args.items() if key not in ('include_deleted','from_date','to_date','from','to')}
+    if start:
+        args['from'] = start
+    if end:
+        args['to'] = end
     result = {}
     try:
         records = _list_rows(conn, 'attendance', args)

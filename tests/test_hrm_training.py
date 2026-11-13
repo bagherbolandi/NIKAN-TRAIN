@@ -41,7 +41,7 @@ def training(tmp_path):
     for number, (site, department) in enumerate(zip(sites, ('A', 'B', 'C')), 1):
         people.append(create(admin, ah, 'people', {'code': f'TRAIN-{number}', 'name': f'Learner {number}',
                       'site_id': site['id'], 'department': department, 'job': 'Engineer',
-                      'location': 'Hall A', 'start_date': '2026-01-01'}, site['company_id']))
+                      'location': 'Hall A', 'start_date': '2026-01-01', 'effective_date': '2026-01-01'}, site['company_id']))
     assert admin.post('/api/competency-bank', headers=ah, json={'code': CODE, 'title': 'Synthetic shared competency'}).status_code == 201
 
     def account(name, scopes, flags=ALL):
@@ -361,3 +361,50 @@ def test_soft_void_is_respected_by_legacy_gap_views(training):
     assert d['a'].delete('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': 1}).status_code == 200
     gaps = d['admin'].get('/api/gaps?company_id=1').json
     assert next(row for row in gaps if row['employee_id'] == eid)['gap'] == 3
+
+
+def test_same_day_new_site_assessment_preserves_scoped_prior_versions(training):
+    d = training; eid = d['people'][0]['id']
+    original = create(d['a'], d['ha'], 'training_assessments', {
+        'employee_id': eid, 'competency_code': CODE, 'level': 4, 'assessment_date': '2026-10-02',
+    })
+    person = d['admin'].get('/api/hrm/people/' + str(eid)).json
+    moved = d['admin'].put('/api/hrm/people/' + str(eid), headers=d['ah'], json={
+        'version': person['version'], 'site_id': d['sites'][1]['id'], 'department': 'B', 'effective_date': '2026-10-02',
+    })
+    assert moved.status_code == 200, moved.json
+    creator, ch = d['account']('new-site-assessor', [{'company_id': 1, 'site_id': d['sites'][1]['id']}],
+                              dict(read=False, create=True, edit=False, delete=False, export=False))
+    backdated = creator.post('/api/hrm/training_assessments', headers=ch, json={
+        'employee_id': eid, 'competency_code': CODE, 'level': 0, 'assessment_date': '2026-10-01',
+    })
+    assert backdated.status_code == 409
+    reevaluated = create(creator, ch, 'training_assessments', {
+        'employee_id': eid, 'competency_code': CODE, 'level': 0, 'assessment_date': '2026-10-02',
+    })
+    assert (reevaluated['id'], reevaluated['version']) == (original['id'], 2)
+    assert creator.get('/api/hrm/training_assessments').status_code == 403
+    assert d['a'].get('/api/hrm/training_assessments').json == []
+    current = row(d['b'], 'training_assessments', original['id'])
+    assert current['level'] == 0 and current['site_id'] == d['sites'][1]['id']
+    assert 'history_json' not in current
+    assert d['b'].get('/api/hrm/training_assessment_history').json == []
+    old_site_history = d['a'].get('/api/hrm/training_assessment_history').json
+    assert len(old_site_history) == 1 and old_site_history[0]['level'] == 4
+    assert old_site_history[0]['site_id'] == d['sites'][0]['id']
+    assert old_site_history[0]['change_kind'] == 'reevaluated_after_transfer'
+    assert old_site_history[0]['changed_by'] and old_site_history[0]['changed_at']
+    # A normal same-owner edit retains another historical version, scoped to B.
+    edited = d['b'].put('/api/hrm/training_assessments/' + str(original['id']), headers=d['hb'], json={
+        'version': 2, 'level': 1, 'assessment_date': '2026-10-03',
+    })
+    assert edited.status_code == 200 and edited.json['version'] == 3
+    assert [r['level'] for r in d['a'].get('/api/hrm/training_assessment_history').json] == [4]
+    assert [r['level'] for r in d['b'].get('/api/hrm/training_assessment_history').json] == [0]
+    assert d['b'].post('/api/hrm/training_assessment_history', headers=d['hb'], json={}).status_code in (404, 405)
+    with sqlite3.connect(d['app'].config['DB']) as conn:
+        assert conn.execute('SELECT count(*) FROM assessments WHERE employee_id=?', (eid,)).fetchone()[0] == 1
+        assert conn.execute('SELECT level FROM assessments WHERE id=?', (original['id'],)).fetchone()[0] == 1
+        history = conn.execute('SELECT history_json FROM hrm_training_assessment_context WHERE assessment_id=?', (original['id'],)).fetchone()[0]
+        assert '"level":4' in history and '"level":0' in history
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []

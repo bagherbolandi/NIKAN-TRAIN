@@ -1,8 +1,10 @@
 """Management benefits use real scoped APIs and preserve monetary/booking history."""
 from concurrent.futures import ThreadPoolExecutor
+import io
 import sqlite3
 import threading
 
+import openpyxl
 import pytest
 
 from app import create_app
@@ -371,3 +373,55 @@ def test_archiving_financial_and_booking_records_retains_history(ready):
         assert conn.execute('SELECT deleted,status FROM hrm_loan_payments WHERE id=?', (payment,)).fetchone() == (1, 'voided')
         assert conn.execute('SELECT deleted,status FROM hrm_reservations WHERE id=?', (booking,)).fetchone() == (1, 'cancelled')
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_archive_toggle_lists_all_benefits_resources_without_reactivating_history(ready):
+    lid = loan(ready)
+    payment = post(ready, 'loan_payments', {'loan_id': lid, 'amount_rials': 10, 'paid_date': '2026-11-13', 'reference': 'ARCHIVE-ALL'})['id']
+    service = post(ready, 'welfare_services', {'company_id': 1, 'name': 'Archived service'})['id']
+    use = post(ready, 'welfare_uses', {'employee_id': ready['people'][0], 'service_id': service, 'quantity': 1, 'used_date': '2026-11-13'})['id']
+    place = property_record(ready)
+    booking = post(ready, 'reservations', reservation(ready, place))['id']
+    for resource, rid in (('loan_payments', payment), ('welfare_uses', use), ('welfare_services', service),
+                          ('reservations', booking), ('properties', place)):
+        response = ready['hr'].delete(f'/api/hrm/{resource}/{rid}', headers=ready['hh'], json={'version': 1})
+        assert response.status_code == 200, response.json
+    assert ready['hr'].put(f'/api/hrm/loans/{lid}', headers=ready['hh'], json={'version': 1, 'status': 'cancelled'}).status_code == 200
+    assert ready['hr'].delete(f'/api/hrm/loans/{lid}', headers=ready['hh'], json={'version': 2}).status_code == 200
+    catalog = ready['hr'].get('/api/hrm/catalog').json
+    for resource, rid in (('loans', lid), ('loan_payments', payment), ('welfare_uses', use),
+                          ('welfare_services', service), ('reservations', booking), ('properties', place)):
+        assert ready['hr'].get('/api/hrm/' + resource).json == []
+        archived = ready['hr'].get('/api/hrm/' + resource + '?include_deleted=1').json
+        assert len(archived) == 1 and archived[0]['id'] == rid
+        assert archived[0]['deleted'] == 1 and archived[0]['is_deleted'] == 1
+        assert catalog[resource]['deletable'] is True and catalog[resource]['restorable'] is False
+    with sqlite3.connect(ready['app'].config['DB']) as conn:
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_archived_financial_rows_remain_scoped_and_do_not_enter_normal_reports(ready):
+    archived = loan(ready, title='PRIVATE-ARCHIVED-COMPANY-ONE', status='registered', amount_rials=301)
+    active = loan(ready, title='VISIBLE-ACTIVE-COMPANY-ONE', amount_rials=302)
+    foreign = loan(ready, ready['people'][2], title='PRIVATE-ARCHIVED-COMPANY-TWO', status='registered', amount_rials=999)
+    for rid in (archived, foreign):
+        assert ready['hr'].delete(f'/api/hrm/loans/{rid}', headers=ready['hh'], json={'version': 1}).status_code == 200
+    visible = ready['one'].get('/api/hrm/loans?include_deleted=1').json
+    assert {row['id'] for row in visible} == {archived, active}
+    assert foreign not in {row['id'] for row in visible}
+    assert ready['one'].get('/api/hrm/loans?include_deleted=1&company_id=2').status_code == 403
+    assert ready['plain'].get('/api/hrm/loans?include_deleted=1').status_code == 403
+    export = ready['one'].get('/api/hrm/reports/loans.xlsx?company_id=1&include_deleted=1')
+    assert export.status_code == 200, export.json
+    workbook = openpyxl.load_workbook(io.BytesIO(export.data), read_only=True)
+    cells = '\n'.join(str(value) for sheet in workbook for row in sheet.values for value in row)
+    workbook.close()
+    assert 'VISIBLE-ACTIVE-COMPANY-ONE' in cells
+    assert 'PRIVATE-ARCHIVED-COMPANY-ONE' not in cells and 'PRIVATE-ARCHIVED-COMPANY-TWO' not in cells
+    normal = ready['one'].get('/api/hrm/dashboard?section=personnel&company_id=1')
+    archive_flag = ready['one'].get('/api/hrm/dashboard?section=personnel&company_id=1&include_deleted=1')
+    assert normal.status_code == archive_flag.status_code == 200
+    assert {key: value for key, value in normal.json.items() if key != 'filters'} == {
+        key: value for key, value in archive_flag.json.items() if key != 'filters'}
+    assert 'include_deleted' not in normal.json['filters']
+    assert archive_flag.json['filters']['include_deleted'] == '1'

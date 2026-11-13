@@ -449,7 +449,13 @@ def register(app, db, authenticated, audit, error):
         labels = {field['key']: field['label'] for field in schema.get('fields', [])}
         labels.update(employee_name='نام و نام خانوادگی',employee_code='کد پرسنلی',
                       company_id='شرکت',site_id='سایت',department='واحد سازمانی',
-                      renewal_count='تعداد تمدید',revision='بازنگری',created='زمان ثبت')
+                      renewal_count='تعداد تمدید',revision='بازنگری',created='زمان ثبت',
+                      company_name='شرکت',site_name='سایت',paid_rials='جمع بازپرداخت (ریال)',
+                      outstanding_rials='مانده (ریال)',repayment_status='وضعیت بازپرداخت',
+                      loan_title='عنوان وام',service_name='خدمت رفاهی',property_name='اقامتگاه',
+                      competency_title='عنوان شایستگی',current_level='سطح فعلی',required_level='سطح لازم',
+                      period_title='دوره ارزیابی',score_percent='امتیاز عملکرد (درصد)',
+                      employee_count='تعداد کارکنان',contract_count='تعداد قرارداد')
         title = schema['title']
         sheet.append(['نیکان — ' + title])
         sheet.append(['تاریخ گزارش', jalali_display(today_iso())])

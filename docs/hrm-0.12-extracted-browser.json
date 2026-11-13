@@ -1,0 +1,42 @@
+{
+  "source_path": "/workspace/nikan-build-tools/extracted-hrm-test",
+  "runtime": "/workspace/nikan-build-tools/standalone-venv/bin/python",
+  "browser_driver": "/workspace/NIKAN-TRAIN/tests/browser_hrm_smoke.py",
+  "launch_arguments": [
+    "/workspace/nikan-build-tools/standalone-venv/bin/python",
+    "-I",
+    "/workspace/nikan-build-tools/extracted-hrm-test/desktop_test.py"
+  ],
+  "native_windows_execution": false,
+  "passed": true,
+  "runtime_probe": {
+    "app_file": "/workspace/nikan-build-tools/extracted-hrm-test/app/__init__.py",
+    "prefix": "/workspace/nikan-build-tools/standalone-venv",
+    "base_prefix": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python",
+    "packages": [
+      "Flask",
+      "Jinja2",
+      "MarkupSafe",
+      "Werkzeug",
+      "blinker",
+      "click",
+      "et_xmlfile",
+      "itsdangerous",
+      "lxml",
+      "openpyxl",
+      "pillow",
+      "pip",
+      "python-docx",
+      "typing_extensions",
+      "waitress"
+    ]
+  },
+  "isolated_profile": "/tmp/nikan-extracted-test-browser-m3diuyb1/NikanHRM-Test",
+  "base_url": "http://127.0.0.1:32937",
+  "expanded_browser_suite": "passed",
+  "deployment_mode": "test",
+  "visible_test_label": "نسخه آزمایشی · داده‌های مستقل",
+  "visible_isolation_footer": "نسخه آزمایشی منابع انسانی نیکان · داده‌های این نسخه مستقل از سامانه عملیاتی هستند",
+  "javascript_errors": [],
+  "clean_desktop_shutdown": true
+}
