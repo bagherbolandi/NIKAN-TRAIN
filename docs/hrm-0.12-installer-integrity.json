@@ -2,13 +2,13 @@
   "passed": true,
   "platform": "linux",
   "native_windows_execution": false,
-  "version": "0.12.0",
+  "version": "0.12.1",
   "checks": [
     {
       "mode": "test",
       "installer": "NikanHRM-Test-Setup.exe",
-      "bytes": 19395934,
-      "sha256": "216fb636dcee81379dcfe7460f293bf201b5308be14dae0b6829efb9bf17f469",
+      "bytes": 19395829,
+      "sha256": "6e378e3be7ea8aa8d68d6c8e8e4cc0cfefde692ccb0e8b4cce866692c3949d1d",
       "payload_files_verified": 2232,
       "source_files_matched": 53,
       "preflight_sources_matched": true
@@ -16,8 +16,8 @@
     {
       "mode": "server",
       "installer": "NikanHRM-Server-Setup.exe",
-      "bytes": 22312913,
-      "sha256": "31913d532027db62a34e8147a415d35d1439978d44968d2f80ae5946f7411915",
+      "bytes": 22312377,
+      "sha256": "de8f09641500b487172f5d2b7c4ba850fc130d9b6a1884b56bc4176c99578a29",
       "payload_files_verified": 2471,
       "source_files_matched": 68,
       "preflight_sources_matched": true

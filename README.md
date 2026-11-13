@@ -1,17 +1,19 @@
-# نیکان HRM — سامانه یکپارچه منابع انسانی هلدینگ، نسخه ۰٫۱۲
+# نیکان HRM — سامانه یکپارچه منابع انسانی هلدینگ، نسخه ۰٫۱۲٫۱
 
 این نسخه، توسعه همان سامانه آموزش نیکان است: یک برنامه فارسی و راست‌چین با پایگاه مرکزی برای امور اداری و پرسنلی، آموزش، ایمنی، و واحد مشترک بهداشت و محیط‌زیست. ثبت اطلاعات را مسئولان مجاز انجام می‌دهند؛ **ورود، کارتابل و ثبت درخواست توسط کارکنان عادی وجود ندارد**.
 
 [وضعیت آزمون‌ها و محدودیت Windows](VALIDATION.md) · [راهنمای نصب سرور و شبکه](NETWORK-README.md) · [مبنای توسعه و حفظ داده‌های قبلی](docs/HRM-DEVELOPMENT.md)
 
+نسخه ۰٫۱۲٫۱ کنترل شکست ایجاد قفل Windows، رعایت حالت بدون مرورگر هنگام اجرای تکراری و آزمون بومی استقلال نسخه‌ها را اضافه می‌کند. نام قفل نسخه ۰٫۱۲٫۰ صحیح بود؛ تغییر ساختار داده در این اصلاح انجام نمی‌شود.
+
 ## دریافت بسته‌ها
 
-مخزن خصوصی است. در **github.com** با حساب دارای دسترسی وارد شوید؛ اگر صفحه فایل باز شد، **Download raw file** را انتخاب کنید. پیوندها متعلق به برچسب ثابت `v0.12.0` هستند.
+مخزن خصوصی است. در **github.com** با حساب دارای دسترسی وارد شوید؛ اگر صفحه فایل باز شد، **Download raw file** را انتخاب کنید. پیوندها متعلق به برچسب ثابت `v0.12.1` هستند.
 
-- [نصاب آزمایشی ویندوز — NikanHRM-Test-Setup.exe](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-Test-Setup.exe?raw=true)
-- [نصاب سرور مرکزی — NikanHRM-Server-Setup.exe](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-Server-Setup.exe?raw=true)
-- [نصاب میانبر کلاینت شبکه](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
-- [سورس نسخه ۰٫۱۲](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-0.12.0-Source.zip?raw=true)
+- [نصاب آزمایشی ویندوز — NikanHRM-Test-Setup.exe](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Test-Setup.exe?raw=true)
+- [نصاب سرور مرکزی — NikanHRM-Server-Setup.exe](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Server-Setup.exe?raw=true)
+- [نصاب میانبر کلاینت شبکه](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
+- [سورس نسخه ۰٫۱۲](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-0.12.1-Source.zip?raw=true)
 
 فایل‌های SHA256 کنار نصاب‌ها برای تطبیق فایل دریافت‌شده هستند. ساخت EXE به‌تنهایی تأیید نصب روی Windows نیست؛ نتیجه اجرای بومی **همین ساخت** را در [VALIDATION.md](VALIDATION.md) بررسی کنید. گزارش نسخه قدیمی، تأیید نسخه ۰٫۱۲ محسوب نمی‌شود.
 

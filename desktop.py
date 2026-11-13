@@ -32,11 +32,13 @@ def main():
   kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.CreateMutexW.restype=ctypes.c_void_p;kernel.CreateMutexW.argtypes=[ctypes.c_void_p,ctypes.c_bool,ctypes.c_wchar_p]
   kernel.CreateEventW.restype=ctypes.c_void_p;kernel.CreateEventW.argtypes=[ctypes.c_void_p,ctypes.c_bool,ctypes.c_bool,ctypes.c_wchar_p]
   mutex=kernel.CreateMutexW(None,False,'Local\\'+profile+'Desktop')
+  if not mutex:raise ctypes.WinError(ctypes.get_last_error())
   if ctypes.get_last_error()==183:
    try:
     url=json.loads(endpoint.read_text())['url']
     if not url.startswith('http://127.0.0.1:'):raise ValueError('Invalid endpoint')
-    wait_ready(url);open_window(url,data)
+    wait_ready(url)
+    if not os.environ.get('NIKAN_HEADLESS_DESKTOP'):open_window(url,data)
    except Exception:ctypes.windll.user32.MessageBoxW(None,'برنامه نیکان در حال اجرا یا راه‌اندازی است. لحظه‌ای بعد دوباره کلیک کنید.','نیکان',0)
    kernel.CloseHandle(ctypes.c_void_p(mutex));return
  os.environ['NIKAN_DATA_DIR']=str(data)

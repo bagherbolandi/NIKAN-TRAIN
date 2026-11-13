@@ -31,8 +31,8 @@
       "waitress"
     ]
   },
-  "isolated_profile": "/tmp/nikan-extracted-test-browser-m3diuyb1/NikanHRM-Test",
-  "base_url": "http://127.0.0.1:32937",
+  "isolated_profile": "/tmp/nikan-extracted-test-browser-n1ix6x7q/NikanHRM-Test",
+  "base_url": "http://127.0.0.1:33351",
   "expanded_browser_suite": "passed",
   "deployment_mode": "test",
   "visible_test_label": "نسخه آزمایشی · داده‌های مستقل",

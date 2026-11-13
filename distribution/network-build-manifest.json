@@ -1,6 +1,6 @@
 {
   "product": "Nikan HRM",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "mode": "server",
   "python": {
     "url": "https://api.nuget.org/v3-flatcontainer/python/3.13.16/python.3.13.16.nupkg",
@@ -38,11 +38,11 @@
     "restore_server.ps1": "fe90f7d379df6e5fd7832d1918c175b970cd1d2ce49d846e97b4496b54fa2d61",
     "run.py": "2825262fab6be910113617a422d5e7ec7eec0f68c5d6cd767b523ed7b9773c50",
     "install_server.ps1": "020cf5602382cabf45ec6211aa9e1b558aa5768f95d24786cf09e62c35dbbac1",
-    "desktop.py": "99b33d4a8fbff964c530888dee5d0476008e97fe5483baf8222556ba4bea3461",
+    "desktop.py": "3e5bdfaf626de943fd362c8952570d21e90e82269515d18512d99a126d2a85e5",
     "recover_account.py": "c2406e5a07986d70372e8a612e79cdbf3c0243a44aa96ae6a6b056be8ee3e6d4",
-    "README.md": "c371c0cfdbe3957c1aa408d237bc66ae42c4aad67470fcc799472b8c0c3418ca",
+    "README.md": "2c466ea708f235ebfce4f3eecc9a7f5d57eed582547cfaa3a100b3a335b55a87",
     "nikan.ico": "f47b0e5a79af77b27c16b3489167b606da0a245f80d611c76318ab0dfd19ce78",
-    "NETWORK-README.md": "c98ea9bf52195d11113e4fb60a8617adfdcbfaf6fdc7d3136243eccb4926dfbd",
+    "NETWORK-README.md": "d1351a834199382020f79d15f0173e30686d7146d837d279104809f88361ca5b",
     "requirements-network.txt": "cd3a74d9c377156d5ac988e311305d5a2ddeb5aa1710a5b1e337096c60c2341a",
     "stop_desktop.py": "a3d7d22661881cd0cdd8802e1a8d09f0d11b5a9eb4cd255f3f1915460171e6b3",
     "stop_hrm_test.py": "54d921426ea7daf5a8e698d68dd8b21fd613a26a83326d65afc580507777dcff",

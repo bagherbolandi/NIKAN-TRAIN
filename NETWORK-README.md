@@ -6,10 +6,10 @@
 
 مخزن خصوصی است؛ ابتدا در github.com با حساب دارای دسترسی وارد شوید. در صفحه فایل در صورت نیاز **Download raw file** را بزنید:
 
-- [نصاب سرور ۰٫۱۲](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-Server-Setup.exe?raw=true)
-- [نصاب میانبر کلاینت](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
-- [نصاب آزمایشی مستقل](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-Test-Setup.exe?raw=true)
-- [سورس و بسته‌ها](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.0/distribution/NikanHRM-0.12.0-Source.zip?raw=true)
+- [نصاب سرور ۰٫۱۲](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Server-Setup.exe?raw=true)
+- [نصاب میانبر کلاینت](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanTraining-Network-Client-Setup.exe?raw=true)
+- [نصاب آزمایشی مستقل](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-Test-Setup.exe?raw=true)
+- [سورس و بسته‌ها](https://github.com/bagherbolandi/NIKAN-TRAIN/blob/v0.12.1/distribution/NikanHRM-0.12.1-Source.zip?raw=true)
 
 ۱. میزبان همیشه روشن x64 با Windows Server 2016 به بعد یا Windows 10/11، دیسک محلی و نام DNS معتبر در شبکه انتخاب کنید. نصاب سرور را با حساب مدیر Windows اجرا و نام میزبان، پورت (پیش‌فرض 8766) و در صورت نیاز مسیر دوم پشتیبان را وارد کنید. Python و وابستگی‌ها همراه نصاب هستند.
 
