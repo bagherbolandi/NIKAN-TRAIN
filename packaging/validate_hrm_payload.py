@@ -332,6 +332,44 @@ def validate(installation):
         assert admin.get('/api/hrm/accord_results?company_id=1').json == [accord_result]
         checks.append('unified branded Excel hub excludes duplicate training/personnel entry forms and rolls preview back without changing identity counters or financial results')
 
+        management_path = '/api/hrm/management-overview?company_id=1'
+        management = admin.get(management_path)
+        assert management.status_code == 200, ('Management overview is unavailable in this payload', management.status_code, management.get_json())
+        management = management.json
+        assert management['as_of'] == iso and management['horizon_days'] == 30
+        assert management['due_before'] == (today + timedelta(days=30)).isoformat()
+        assert management['metrics']['current_personnel'] == 2
+        assert {'training_gaps', 'training_unassessed', 'training_evidence_reviews',
+                'medical_follow_up'}.issubset({row['key'] for row in management['categories']})
+        assert all(len(category['items']) <= 6 and 'target' in category
+                   for category in management['categories'])
+        local_management = site_b.get(management_path)
+        assert local_management.status_code == 200, local_management.json
+        assert {row['module'] for row in local_management.json['categories']} == {'contracts'}
+        assert all(row['count'] == 0 and row['items'] == [] for row in local_management.json['categories'])
+        safety_management = safety.get(management_path)
+        assert safety_management.status_code == 200, safety_management.json
+        assert all(row['module'] != 'health' for row in safety_management.json['categories'])
+        assert 'medical_follow_up' not in safety_management.json['metrics']
+        assert 'SYNTHETIC-CLINICAL-PRIVATE' not in safety_management.get_data(as_text=True)
+        assert safety.get('/api/hrm/management-overview?company_id=2').status_code == 403
+        assert creator.get(management_path).status_code == 403
+        index = admin.get('/')
+        assert index.status_code == 200
+        for name in ('workspace-shell.js', 'workspace-shell.css'):
+            assert ('/static/' + name) in index.get_data(as_text=True)
+            asset = admin.get('/static/' + name)
+            assert asset.status_code == 200 and len(asset.data) > 100
+        with closing(sqlite3.connect(app.config['DB'])) as connection:
+            after_management = dict(
+                employees=connection.execute('SELECT id,code,name FROM employees ORDER BY id').fetchall(),
+                details=connection.execute('SELECT count(*) FROM hrm_employee_details').fetchone()[0],
+                history=connection.execute('SELECT count(*) FROM hrm_employment_history').fetchone()[0],
+                audit=connection.execute('SELECT count(*) FROM audit').fetchone()[0],
+                counters=connection.execute('SELECT * FROM company_registry ORDER BY id').fetchall())
+        assert after_management == after_preview
+        checks.append('professional shell assets and scoped read-only management follow-up preserve identity, exclude ungranted medical data and never fabricate a zero for unavailable sections')
+
         backup = admin.post('/api/backup', headers=headers)
         assert backup.status_code == 200 and backup.data.startswith(b'SQLite format 3')
         restored = folder / 'restored';restored.mkdir()
@@ -352,6 +390,8 @@ def validate(installation):
         assert sum(row['id'] == first for row in restored_directory.json['people']) == 1
         restored_overview = restored_admin.get(overview_path)
         assert restored_overview.status_code == 200 and restored_overview.json == overview.json
+        restored_management = restored_admin.get(management_path)
+        assert restored_management.status_code == 200 and restored_management.json == management
         with closing(sqlite3.connect(restored_app.config['DB'])) as connection:
             assert connection.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
             assert connection.execute('PRAGMA foreign_key_check').fetchall() == []

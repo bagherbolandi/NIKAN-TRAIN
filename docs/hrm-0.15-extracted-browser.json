@@ -1,0 +1,78 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "installer_version": "0.15.0",
+  "installer": "NikanHRM-Test-Setup.exe",
+  "launcher": "desktop_test.py",
+  "server_interpreter": "/workspace/nikan-build-tools/standalone-venv/bin/python",
+  "module_paths": {
+    "app": "/workspace/nikan-build-tools/extracted-hrm-test/app/__init__.py",
+    "app.hrm_management": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_management.py",
+    "app.hrm_excel": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_excel.py",
+    "app.hrm_matrix": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_matrix.py",
+    "app.hrm_integration": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_integration.py"
+  },
+  "production_runtime_has_pytest": false,
+  "production_runtime_has_playwright": false,
+  "test_profile_isolation_label_visible": true,
+  "workspace": {
+    "passed": true,
+    "platform": "linux",
+    "native_windows_execution": false,
+    "checks": [
+      "32 authorized personnel: exact total, page size and stable natural code sorting",
+      "Arabic/Persian letters and digits, zero-width/repeated spaces normalize in local search",
+      "keyboard-sort, paging and filtered edit preserve record ID/version and list state",
+      "exact whole-rial sorting and editor retain the full supported amount",
+      "live scoped action center: bounded samples, full counts, error retry, combined health workspace and original person/resource link",
+      "mobile scope filters start folded, open accessibly and apply/reset the same scoped API filters",
+      "company/site-only reader: no foreign or medical/financial cards; 390/320 mobile without page overflow"
+    ],
+    "javascript_errors": []
+  },
+  "shell": {
+    "passed": true,
+    "platform": "linux",
+    "native_windows_execution": false,
+    "checks": [
+      "role-filtered original pages grouped once in seven domain sections with official local logo and no global search",
+      "active module, page title and breadcrumbs track canonical personnel workspace",
+      "collapsible navigation preserves account-session choice across a permission-aware redraw",
+      "programmatic navigation expands its previously collapsed group and keeps the active destination visible",
+      "vertical menu keyboard navigation preserves a visible focus target",
+      "company selection updates visible scope and reads the matching company without replacing the identity source",
+      "1440, 1024, 390 and 320 pixel layouts contain the page while navigation scrolls independently",
+      "mobile drawer hides from accessibility tree when closed, traps focus when open and restores focus on Escape",
+      "backdrop and navigation close the drawer and restore usable content",
+      "transient server error exposes safe correlation code and retry recovers without ending session or repeating a write",
+      "company personnel manager sees only assigned-company operational pages and no access management, clinical or finance navigation"
+    ],
+    "layouts": [
+      {
+        "width": 1440,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 1024,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 390,
+        "horizontal_overflow": false
+      },
+      {
+        "width": 320,
+        "horizontal_overflow": false
+      }
+    ],
+    "javascript_errors": [],
+    "screenshots": [
+      "hrm-0.15-shell-1440.png",
+      "hrm-0.15-shell-390.png"
+    ]
+  },
+  "limitations": [
+    "Actual extracted application payload and desktop_test launcher exercised in Linux with minimal production dependencies. Native Windows EXE/NSIS installation remains unconfirmed."
+  ]
+}

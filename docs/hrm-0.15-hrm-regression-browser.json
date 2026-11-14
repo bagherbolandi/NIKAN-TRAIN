@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "checks": [
+    "primary holding account has all seven companies, four domain dashboards and explicit missing metrics",
+    "central directory creates and edits one identity, rejects stale version, searches and applies scope to XLSX export",
+    "contract renewal appends linked history and protected document upload/download/edit preserves exact bytes",
+    "attendance workbook preview is read-only, commit writes once, archive hides and restore recovers the original record",
+    "training course, actual attendance, assessment and site requirement forms share the existing training identities",
+    "all operational workspaces and four domain dashboards plus holding render; temporary work queues a visible PPE review",
+    "site and department scoped personnel/safety account cannot edit, export, read another company/site or access clinical records",
+    "create-only personnel permission can save without reading rows; revocation terminates stale session rights",
+    "mixed document permissions select the writable group while preserving independent file-read permission",
+    "site-only training officer creates and edits local courses while legacy API and foreign-site/person writes stay forbidden",
+    "access editor exposes independent read/create/edit/delete/export grants and creates an explicitly scoped holding manager",
+    "mobile drawer navigation reaches dashboard without overflow and compact filters open on demand; no JavaScript errors"
+  ],
+  "javascript_errors": []
+}

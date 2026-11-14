@@ -174,6 +174,7 @@ def check(base):
             _check_accord(page, api, create_account, company_id, site, person, visitor, checks)
 
             page.set_viewport_size({'width': 390, 'height': 844})
+            page.locator('#workspace-menu-toggle').click()
             page.locator('[data-page=hrm_structure]').click()
             page.locator('#hrm-roster-current').wait_for()
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'mobile horizontal overflow'

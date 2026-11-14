@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "version": "0.15.0",
+  "checks": [
+    {
+      "mode": "test",
+      "installer": "NikanHRM-Test-Setup.exe",
+      "bytes": 19461265,
+      "sha256": "8ef3dd374168920d637c8f27cd22e2f79425310450399db85a01cc57cc445eea",
+      "payload_files_verified": 2244,
+      "source_files_matched": 65,
+      "preflight_sources_matched": true
+    },
+    {
+      "mode": "server",
+      "installer": "NikanHRM-Server-Setup.exe",
+      "bytes": 22379233,
+      "sha256": "d1c015f9dda987927c9019786889eecd6a1e2c9ff03a9cbb13315cb65b1b9eed",
+      "payload_files_verified": 2483,
+      "source_files_matched": 80,
+      "preflight_sources_matched": true
+    }
+  ],
+  "client": {
+    "bytes": 162558,
+    "sha256": "f88a3279858e9705e9cbceb01162910af1006c8cc60fb2fe61b93e3881aaa000"
+  },
+  "note": "NSIS extraction, manifest integrity and source identity; does not execute Windows installers."
+}

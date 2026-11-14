@@ -23,6 +23,8 @@ REQUIRED={'employees':['code','name'],'skills':['code','title'],'requirements':[
 
 def create_app(data_dir=None,testing=False):
  app=Flask(__name__,static_folder='static'); app.config.update(TESTING=testing,MAX_CONTENT_LENGTH=16*1024*1024,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',PERMANENT_SESSION_LIFETIME=1800)
+ from .runtime_errors import register as register_runtime_errors
+ register_runtime_errors(app)
  root=Path(data_dir or os.environ.get('NIKAN_DATA_DIR') or (Path(os.environ.get('LOCALAPPDATA',str(Path.home()))) / 'NikanTraining'));root.mkdir(parents=True,exist_ok=True)
  key=root/'session.key'
  if not key.exists():
@@ -396,6 +398,8 @@ def create_app(data_dir=None,testing=False):
  register_hrm_integration(app,db,authenticated,audit,error)
  from .hrm_core import register as register_hrm_core
  register_hrm_core(app,db,authenticated,audit,error)
+ from .hrm_management import register as register_hrm_management
+ register_hrm_management(app,db,authenticated,audit,error)
  from .hrm_excel import register as register_hrm_excel
  register_hrm_excel(app,db,authenticated,audit,error)
  from .hrm_migrations import complete as complete_hrm_migration

@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "checks": [
+    "role-filtered original pages grouped once in seven domain sections with official local logo and no global search",
+    "active module, page title and breadcrumbs track canonical personnel workspace",
+    "collapsible navigation preserves account-session choice across a permission-aware redraw",
+    "programmatic navigation expands its previously collapsed group and keeps the active destination visible",
+    "vertical menu keyboard navigation preserves a visible focus target",
+    "company selection updates visible scope and reads the matching company without replacing the identity source",
+    "1440, 1024, 390 and 320 pixel layouts contain the page while navigation scrolls independently",
+    "mobile drawer hides from accessibility tree when closed, traps focus when open and restores focus on Escape",
+    "backdrop and navigation close the drawer and restore usable content",
+    "transient server error exposes safe correlation code and retry recovers without ending session or repeating a write",
+    "company personnel manager sees only assigned-company operational pages and no access management, clinical or finance navigation"
+  ],
+  "layouts": [
+    {
+      "width": 1440,
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1024,
+      "horizontal_overflow": false
+    },
+    {
+      "width": 390,
+      "horizontal_overflow": false
+    },
+    {
+      "width": 320,
+      "horizontal_overflow": false
+    }
+  ],
+  "javascript_errors": [],
+  "screenshots": [
+    "hrm-0.15-shell-1440.png",
+    "hrm-0.15-shell-390.png"
+  ]
+}

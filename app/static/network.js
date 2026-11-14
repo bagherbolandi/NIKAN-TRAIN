@@ -5,7 +5,7 @@ render=async function(){
  clearTimeout(backupPoll);const view=++backupViewSequence;
  if(!user?.network||page!=='backup'){
   await networkRender();
-  if(user?.network&&view===backupViewSequence){$('.aside-bottom').textContent='نسخه شبکه · پایگاه داده مرکزی';$('footer').textContent='سامانه آموزش نیکان · داده مرکزی و دسترسی مستقل شرکت‌ها';const button=document.querySelector('[data-page=backup]');if(button)button.textContent='پشتیبان و بازیابی'}
+  if(user?.network&&view===backupViewSequence){$('.aside-bottom').textContent='نسخه شبکه · پایگاه داده مرکزی';$('footer').textContent='سامانه یکپارچه منابع انسانی نیکان · داده مرکزی و دسترسی مستقل شرکت‌ها';const button=document.querySelector('[data-page=backup]');if(button)button.textContent='پشتیبان و بازیابی'}
   return;
  }
  workspaceHeading();if(user.role!=='admin')return;

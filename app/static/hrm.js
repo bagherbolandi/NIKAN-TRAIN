@@ -35,7 +35,7 @@
  function scopedHrm(path,companyId=cid,includeFilters=true){
   const [base,query='']=path.split('?'),parameters=new URLSearchParams(query);
   ensureFilters();
-  if(companyId&&!(includeFilters&&activeFilters.all_companies&&(base==='hrm/dashboard'||base.startsWith('hrm/reports/')||base==='hrm/workforce_report')))parameters.set('company_id',companyId);
+  if(companyId&&!(includeFilters&&activeFilters.all_companies&&(base==='hrm/dashboard'||base==='hrm/management-overview'||base.startsWith('hrm/reports/')||base==='hrm/workforce_report')))parameters.set('company_id',companyId);
   if(includeFilters)for(const key of ['site_id','department','employee_id','from_date','to_date'])if(activeFilters[key])parameters.set(key,activeFilters[key]);
   if(includeFilters&&inPersonWorkspace()){if(base==='hrm/'+personWorkspace.resource||base==='hrm/reports/'+personWorkspace.resource+'.xlsx')for(const [key,value] of Object.entries(personWorkspace.resourceFilters||{}))parameters.set(key,String(value));parameters.set('employee_id',String(personWorkspace.id));}
   return base+(parameters.size?'?'+parameters.toString():'');
@@ -50,7 +50,10 @@
   const departments=[...new Set(people.map(person=>person.department).filter(Boolean))].sort();
   const form=document.createElement('form');form.className='hrm-filters panel';form.id='hrm-filters';
   form.innerHTML='<div class="hrm-filter-grid">'+(aggregate?'<label>سطح گزارش<select name="all_companies"><option value="">شرکت انتخاب‌شده</option><option value="1" '+(activeFilters.all_companies?'selected':'')+'>تمام شرکت‌های مجاز</option></select></label>':'')+'<label>سایت<select name="site_id"><option value="">تمام سایت‌های مجاز</option>'+sites.map(site=>'<option value="'+site.id+'" '+(String(activeFilters.site_id||'')===String(site.id)?'selected':'')+'>'+esc(site.name||site.title)+'</option>').join('')+'</select></label><label>واحد سازمانی<input name="department" list="hrm-departments" value="'+esc(activeFilters.department||'')+'" placeholder="همه واحدهای مجاز"><datalist id="hrm-departments">'+departments.map(value=>'<option value="'+esc(value)+'">').join('')+'</datalist></label><label>فرد<select name="employee_id" data-searchable="true"><option value="">همه افراد مجاز</option>'+people.map(person=>'<option value="'+(person.id??person.employee_id)+'" '+(String(activeFilters.employee_id||'')===String(person.id??person.employee_id)?'selected':'')+'>'+esc((person.name||person.employee_name)+' · '+person.code)+'</option>').join('')+'</select></label><label>از تاریخ شمسی<input name="from_date" dir="ltr" inputmode="numeric" placeholder="1405/01/01" value="'+esc(activeFilters.from_date||'')+'"></label><label>تا تاریخ شمسی<input name="to_date" dir="ltr" inputmode="numeric" placeholder="1405/12/29" value="'+esc(activeFilters.to_date||'')+'"></label></div><div class="toolbar"><button type="submit">اعمال فیلتر</button><button type="button" class="quiet" id="hrm-clear-filters">پاک کردن فیلترها</button><small class="help">شرکت از بالای صفحه انتخاب می‌شود؛ همه نتایج در محدوده مجوز حساب شما هستند.</small></div>';
-  target.prepend(form);
+  const disclosure=document.createElement('details');disclosure.className='hrm-filter-disclosure';disclosure.open=window.matchMedia('(min-width:761px)').matches;
+  const filterCount=['site_id','department','employee_id','from_date','to_date'].filter(key=>activeFilters[key]).length;
+  disclosure.innerHTML='<summary>فیلترهای این بخش <span>'+esc((activeFilters.all_companies?'تمام شرکت‌های مجاز · ':'')+(filterCount?fa(filterCount)+' فیلتر فعال':'بدون فیلتر تکمیلی'))+'</span></summary>';
+  disclosure.append(form);target.prepend(disclosure);
   form.onsubmit=event=>{event.preventDefault();activeFilters=Object.fromEntries(new FormData(form));renderCurrent()};
   form.querySelector('#hrm-clear-filters').onclick=()=>{resetFilters();renderCurrent()};
  }
@@ -61,6 +64,54 @@
  const owner=()=>({account:user,company:Number(cid),page,version:navigationVersion});
  const fa=value=>Number(value||0).toLocaleString('fa-IR');
  const archiveViews=new Set();
+ const listViews=new Map();
+ const normalizeListText=value=>String(value??'').normalize('NFKC').toLocaleLowerCase('fa')
+  .replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/[\u064b-\u065f\u0670\u0640]/g,'')
+  .replace(/[\u200c\u200d]/g,' ').replace(/[۰-۹]/g,digit=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+  .replace(/[٠-٩]/g,digit=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).replace(/\s+/g,' ').trim();
+ const searchMatch=(value,query)=>normalizeListText(value).includes(normalizeListText(query));
+ const textCollator=new Intl.Collator('fa',{numeric:true,sensitivity:'base'});
+ function listView(key){
+  const identity=Number(cid)+':'+key+':'+(inPersonWorkspace()?personWorkspace.id:'all');
+  if(!listViews.has(identity))listViews.set(identity,{query:'',offset:0,size:25,sort:'',direction:1});
+  return listViews.get(identity);
+ }
+ function orderedRows(rows,schema,state){
+  if(!state.sort)return rows;
+  const key=state.sort,field=schema?.fields?.find(item=>item.key===key);
+  const value=row=>/_rials$/.test(key)?(row[key+'_exact']??row[key]):row[key];
+  return rows.map((row,index)=>({row,index})).sort((a,b)=>{
+   const av=value(a.row),bv=value(b.row),am=av===null||av===undefined||av==='',bm=bv===null||bv===undefined||bv==='';
+   if(am||bm)return am===bm?a.index-b.index:am?1:-1;
+   let comparison;
+   if((/_rials$/.test(key)||field?.type==='money')&&/^-?\d+$/.test(String(av))&&/^-?\d+$/.test(String(bv))){const x=BigInt(av),y=BigInt(bv);comparison=x===y?0:x<y?-1:1;}
+   else if(typeof av==='number'&&typeof bv==='number')comparison=av===bv?0:av<bv?-1:1;
+   else comparison=textCollator.compare(cellValue(schema,key,av,a.row),cellValue(schema,key,bv,b.row));
+   return comparison*state.direction||a.index-b.index;
+  }).map(item=>item.row);
+ }
+ function listHeader(schema,key,state){
+  const selected=state.sort===key,label=fieldLabel(schema,key);
+  return '<th scope="col" aria-sort="'+(selected?(state.direction===1?'ascending':'descending'):'none')+'"><button type="button" class="hrm-sort" data-hrm-sort="'+esc(key)+'" aria-label="مرتب‌سازی بر اساس '+esc(label)+(selected?(state.direction===1?'؛ صعودی':'؛ نزولی'):'')+'">'+esc(label)+'<span aria-hidden="true">'+(selected?(state.direction===1?'↑':'↓'):'↕')+'</span></button></th>';
+ }
+ function listTools(state){
+  return '<div class="hrm-list-options"><button type="button" class="quiet" data-list-reset>پاک کردن جستجو و ترتیب</button><label>تعداد در صفحه<select data-list-size data-searchable="false" aria-label="تعداد رکورد در صفحه">'+[10,25,50].map(size=>'<option value="'+size+'" '+(state.size===size?'selected':'')+'>'+fa(size)+'</option>').join('')+'</select></label></div>';
+ }
+ function listPager(state,total){
+  if(!total)return '';
+  return '<div class="pager hrm-list-pager" aria-label="صفحه‌بندی فهرست"><button type="button" class="quiet" data-prev '+(!state.offset?'disabled':'')+'>قبلی</button><span>'+fa(state.offset+1)+' تا '+fa(Math.min(state.offset+state.size,total))+' از '+fa(total)+' · صفحه '+fa(Math.floor(state.offset/state.size)+1)+' از '+fa(Math.ceil(total/state.size))+'</span><button type="button" class="quiet" data-next '+(state.offset+state.size>=total?'disabled':'')+'>بعدی</button></div>';
+ }
+ function listBindings(workspace,state,draw){
+  const input=workspace.querySelector('#hrm-search');input.value=state.query;
+  input.oninput=event=>{state.query=event.target.value;state.offset=0;draw()};
+  workspace.querySelector('[data-list-size]').onchange=event=>{state.size=Number(event.target.value);state.offset=0;draw()};
+  workspace.querySelector('[data-list-reset]').onclick=()=>{Object.assign(state,{query:'',offset:0,sort:'',direction:1});input.value='';draw();input.focus()};
+ }
+ function changeSort(event,state,draw){
+  const button=event.target.closest('[data-hrm-sort]');if(!button)return false;
+  const key=button.dataset.hrmSort;state.direction=state.sort===key?-state.direction:1;state.sort=key;state.offset=0;draw();
+  event.currentTarget.querySelector('[data-hrm-sort="'+CSS.escape(key)+'"]')?.focus({preventScroll:true});return true;
+ }
  const asRows=value=>Array.isArray(value)?value:(value?.items||value?.rows||value?.data||[]);
  let catalogOwner=null,catalogCompany=null,catalogCache=null;
  let editorDirty=false,editorBusy=false,editorOwner=null,editorGeneration=0;
@@ -72,7 +123,7 @@
   const parts=new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Tehran'}).formatToParts(parsed);
   return ['year','month','day'].map(type=>parts.find(part=>part.type===type)?.value).join('/');
  }
- function fieldLabel(schema,key){return schema?.fields?.find(field=>field.key===key)?.label||labels[key]||({employee_name:'نام فرد',employee_code:'کد پرسنلی',company_name:'شرکت',unit_name:'واحد',site_id:'سایت محل خدمت',site_name:'سایت',unit_id:'واحد تعریف‌شده',location:'محل فعالیت',due_date:'موعد پیگیری',exam_date:'تاریخ معاینه',fitness:'تناسب شغلی',contract_count:'تعداد قرارداد',employee_count:'تعداد کارکنان',version:'بازنگری',paid_rials:'جمع بازپرداخت (ریال)',outstanding_rials:'مانده (ریال)',repayment_status:'وضعیت بازپرداخت',renewal_count:'تعداد تمدید',days_remaining:'روز تا پایان',score_percent:'امتیاز عملکرد (درصد)',period_title:'دوره ارزیابی',total_records:'تعداد ثبت',work_minutes:'حضور (دقیقه)',leave_minutes:'مرخصی (دقیقه)',mission_minutes:'مأموریت (دقیقه)',absence_minutes:'غیبت (دقیقه)',late_minutes:'تأخیر (دقیقه)',overtime_minutes:'اضافه‌کاری (دقیقه)',review_required:'نیازمند بازنگری الزامات',ppe_review_required:'نیازمند بازنگری PPE',ppe_name:'تجهیز حفاظت فردی',missing_quantity:'کسری تعداد',next_due_date:'موعد تعویض',overdue:'نیازمند تعویض',reason:'علت پیگیری',target_site_id:'سایت فعالیت موقت',activity_location:'محل فعالیت واقعی',exam_type:'نوع معاینه',next_review_date:'موعد معاینه بعدی',employees:'تعداد کارکنان',contracts:'قراردادها',ppe_missing:'کسری تجهیزات حفاظت فردی',medical_due:'معاینات سررسیدشده',training_hours:'آموزش (ساعت)',actual_person_hours:'نفرساعت آموزش واقعی',competency_title:'عنوان شایستگی',current_level:'سطح فعلی',required_level:'سطح لازم',assessment_date:'تاریخ ارزیابی',record_date:'تاریخ سابقه آموزشی',target_site_name:'سایت فعالیت موقت',completion_percent:'درصد تکمیل شاخص‌ها',participation_percent:'درصد مشارکت',accord_rials:'آکورد (ریال)',base_rials:'مبلغ مبنا (ریال)',budget_rials:'بودجه آکورد (ریال)',policy_title:'ضابطه آکورد',policy_status:'وضعیت ضابطه',calculated_at:'زمان محاسبه',method:'روش محاسبه',minimum_score:'حداقل امتیاز',scheduled_minutes:'دقایق مبنای دوره',actual_minutes:'دقایق مشارکت مؤثر'}[key])||key;}
+ function fieldLabel(schema,key){return schema?.fields?.find(field=>field.key===key)?.label||labels[key]||({number:'شماره',start_date:'تاریخ شروع',end_date:'تاریخ پایان',criteria_count:'تعداد شاخص',employee_name:'نام فرد',employee_code:'کد پرسنلی',company_name:'شرکت',unit_name:'واحد',site_id:'سایت محل خدمت',site_name:'سایت',unit_id:'واحد تعریف‌شده',location:'محل فعالیت',due_date:'موعد پیگیری',exam_date:'تاریخ معاینه',fitness:'تناسب شغلی',contract_count:'تعداد قرارداد',employee_count:'تعداد کارکنان',version:'بازنگری',paid_rials:'جمع بازپرداخت (ریال)',outstanding_rials:'مانده (ریال)',repayment_status:'وضعیت بازپرداخت',renewal_count:'تعداد تمدید',days_remaining:'روز تا پایان',score_percent:'امتیاز عملکرد (درصد)',period_title:'دوره ارزیابی',total_records:'تعداد ثبت',work_minutes:'حضور (دقیقه)',leave_minutes:'مرخصی (دقیقه)',mission_minutes:'مأموریت (دقیقه)',absence_minutes:'غیبت (دقیقه)',late_minutes:'تأخیر (دقیقه)',overtime_minutes:'اضافه‌کاری (دقیقه)',review_required:'نیازمند بازنگری الزامات',ppe_review_required:'نیازمند بازنگری PPE',ppe_name:'تجهیز حفاظت فردی',missing_quantity:'کسری تعداد',next_due_date:'موعد تعویض',overdue:'نیازمند تعویض',reason:'علت پیگیری',target_site_id:'سایت فعالیت موقت',activity_location:'محل فعالیت واقعی',exam_type:'نوع معاینه',next_review_date:'موعد معاینه بعدی',employees:'تعداد کارکنان',contracts:'قراردادها',ppe_missing:'کسری تجهیزات حفاظت فردی',medical_due:'معاینات سررسیدشده',training_hours:'آموزش (ساعت)',actual_person_hours:'نفرساعت آموزش واقعی',competency_title:'عنوان شایستگی',current_level:'سطح فعلی',required_level:'سطح لازم',assessment_date:'تاریخ ارزیابی',record_date:'تاریخ سابقه آموزشی',target_site_name:'سایت فعالیت موقت',completion_percent:'درصد تکمیل شاخص‌ها',participation_percent:'درصد مشارکت',accord_rials:'آکورد (ریال)',base_rials:'مبلغ مبنا (ریال)',budget_rials:'بودجه آکورد (ریال)',policy_title:'ضابطه آکورد',policy_status:'وضعیت ضابطه',calculated_at:'زمان محاسبه',method:'روش محاسبه',minimum_score:'حداقل امتیاز',scheduled_minutes:'دقایق مبنای دوره',actual_minutes:'دقایق مشارکت مؤثر'}[key])||key;}
  function choicesOf(field){
   const value=field.choices||field.options||[];
   return Array.isArray(value)?value.map(item=>Array.isArray(item)?item:[item.value??item.key??item,item.label??item.title??String(item)]):Object.entries(value);
@@ -156,7 +207,7 @@
  };
  const priorReset=resetSession;
  resetSession=function(message=''){
-  catalogCache=null;catalogOwner=null;filterOwner=null;activeFilters={};dashboardSection='';structureCompany=null;structureSite='';personWorkspace=null;archiveViews.clear();editorGeneration++;editorDirty=false;editorBusy=false;editorOwner=null;
+  catalogCache=null;catalogOwner=null;filterOwner=null;activeFilters={};dashboardSection='';structureCompany=null;structureSite='';personWorkspace=null;archiveViews.clear();listViews.clear();editorGeneration++;editorDirty=false;editorBusy=false;editorOwner=null;
   $('#hrm-editor')?.close();priorReset(message);
  };
  const priorRender=render;
@@ -211,7 +262,7 @@
  window.nikanHrmOpenResource=async function(resource,options={}){
   if(!user||workspaceSaving)return;
   if(options.employee_id)return openPersonWorkspace(Number(options.employee_id),{module:options.module||'',resource});
-  const resources=await catalog(),module=resource==='skill_matrix'?'training':resources[resource]?.module;
+  const resources=await catalog(),sourceModule=resource==='skill_matrix'?'training':resources[resource]?.module,module=sourceModule==='health'?'health_environment':sourceModule;
   if(!module)return;
   if(options.site_id){ensureFilters();activeFilters.site_id=String(options.site_id);}
   sessionStorage.setItem('nikan-hrm-resource-'+module,resource);return navigateTo('hrm_'+module);
@@ -240,18 +291,19 @@
  }
  async function renderPeopleDirectory(workspace,schema,viewOwner,isCurrent){
   const response=await api(scopedHrm('hrm/people-directory'));if(!isCurrent())return;const rows=asRows(response.people||response);
-  workspace.innerHTML='<div class="toolbar hrm-toolbar"><label>جستجوی کارکنان<input id="hrm-search" placeholder="نام، کد پرسنلی، سایت یا واحد" autocomplete="off"></label><div>'+(schema&&schemaCan(schema,'create')?'<button type="button" id="hrm-add">＋ ثبت فرد در پرونده مرکزی</button>':'')+(schema&&schemaCan(schema,'export')?'<button type="button" class="quiet" id="hrm-export">خروجی Excel اطلاعات پرسنلی</button>':'')+'</div></div><p class="help">فهرست شامل افراد جاری و افرادی است که سوابق مجاز در این محدوده دارند. اطلاعات محل خدمت فعلی فقط در صورت داشتن مجوز آن محدوده نمایش داده می‌شود.</p><p id="hrm-row-status" class="help" role="status"></p><div id="hrm-table"></div>';
-  let query='',offset=0;const table=workspace.querySelector('#hrm-table');
+  const state=listView('people-directory');
+  workspace.innerHTML='<div class="toolbar hrm-toolbar"><label>جستجوی کارکنان<input id="hrm-search" placeholder="نام، کد پرسنلی، سایت یا واحد" autocomplete="off"></label>'+listTools(state)+'<div>'+(schema&&schemaCan(schema,'create')?'<button type="button" id="hrm-add">＋ ثبت فرد در پرونده مرکزی</button>':'')+(schema&&schemaCan(schema,'export')?'<button type="button" class="quiet" id="hrm-export">خروجی Excel اطلاعات پرسنلی</button>':'')+'</div></div><p class="help">فهرست شامل افراد جاری و افرادی است که سوابق مجاز در این محدوده دارند. اطلاعات محل خدمت فعلی فقط در صورت داشتن مجوز آن محدوده نمایش داده می‌شود.</p><p id="hrm-row-status" class="help" role="status" aria-live="polite" aria-atomic="true"></p><div id="hrm-table"></div>';
+  const table=workspace.querySelector('#hrm-table');
   function draw(){
-   const filtered=rows.filter(person=>searchMatch([person.name,person.code,person.company_name,person.site_name,person.department,person.job].filter(Boolean).join(' '),query));if(offset>=filtered.length)offset=Math.max(0,Math.floor((filtered.length-1)/25)*25);
-   workspace.querySelector('#hrm-row-status').textContent=fa(filtered.length)+' پرونده مجاز';
-   table.innerHTML=filtered.length?'<div class="table-wrap"><table><thead><tr><th>کد پرسنلی</th><th>نام و نام خانوادگی</th><th>شرکت / سایت جاری</th><th>واحد / سمت</th><th>مبنای دسترسی</th><th>پرونده</th></tr></thead><tbody>'+filtered.slice(offset,offset+25).map(person=>'<tr data-hrm-row="'+person.id+'"><td>'+esc(person.code)+'</td><td>'+esc(person.name)+'</td><td>'+esc(person.current_assignment_visible?[person.company_name,person.site_name].filter(Boolean).join(' / ')||'سایت ثبت نشده':'در این محدوده نمایش داده نمی‌شود')+'</td><td>'+esc(person.current_assignment_visible?[person.department,person.job].filter(Boolean).join(' / ')||'ثبت نشده':'—')+'</td><td>'+esc(person.current_assignment_visible?'انتساب فعلی مجاز':'سوابق مجاز این محدوده')+'</td><td class="hrm-row-actions">'+personLink(person)+(schema&&schemaCan(schema,'edit')&&schemaCan(schema,'read')&&person.current_assignment_visible?'<button type="button" class="quiet" data-directory-edit="'+person.id+'">ویرایش مشخصات</button>':'')+'</td></tr>').join('')+'</tbody></table></div>'+pager(offset,25,filtered.length):'<div class="empty"><h3>پرونده‌ای در این محدوده پیدا نشد</h3><p>فیلترها را بررسی کنید یا در صورت داشتن مجوز، فرد را ثبت کنید.</p></div>';
-   bindPager(table,()=>{offset-=25;draw()},()=>{offset+=25;draw()});
+   const filtered=orderedRows(rows.filter(person=>searchMatch([person.name,person.code,person.company_name,person.site_name,person.department,person.job].filter(Boolean).join(' '),state.query)),schema,state);if(state.offset>=filtered.length)state.offset=Math.max(0,Math.floor((filtered.length-1)/state.size)*state.size);
+   workspace.querySelector('#hrm-row-status').textContent=fa(filtered.length)+' از '+fa(rows.length)+' پرونده مجاز';
+   table.innerHTML=filtered.length?'<div class="table-wrap"><table><thead><tr>'+['code','name','company_name','department'].map(field=>listHeader({fields:[{key:'code',label:'کد پرسنلی'},{key:'name',label:'نام و نام خانوادگی'},{key:'company_name',label:'شرکت / سایت جاری'},{key:'department',label:'واحد / سمت'}]},field,state)).join('')+'<th>مبنای دسترسی</th><th>پرونده</th></tr></thead><tbody>'+filtered.slice(state.offset,state.offset+state.size).map(person=>'<tr data-hrm-row="'+person.id+'"><td>'+esc(person.code)+'</td><td>'+esc(person.name)+'</td><td>'+esc(person.current_assignment_visible?[person.company_name,person.site_name].filter(Boolean).join(' / ')||'سایت ثبت نشده':'در این محدوده نمایش داده نمی‌شود')+'</td><td>'+esc(person.current_assignment_visible?[person.department,person.job].filter(Boolean).join(' / ')||'ثبت نشده':'—')+'</td><td>'+esc(person.current_assignment_visible?'انتساب فعلی مجاز':'سوابق مجاز این محدوده')+'</td><td class="hrm-row-actions">'+personLink(person)+(schema&&schemaCan(schema,'edit')&&schemaCan(schema,'read')&&person.current_assignment_visible?'<button type="button" class="quiet" data-directory-edit="'+person.id+'">ویرایش مشخصات</button>':'')+'</td></tr>').join('')+'</tbody></table></div>'+listPager(state,filtered.length):'<div class="empty"><h3>پرونده‌ای در این محدوده پیدا نشد</h3><p>فیلترها را بررسی کنید یا در صورت داشتن مجوز، فرد را ثبت کنید.</p></div>';
+   bindPager(table,()=>{state.offset-=state.size;draw()},()=>{state.offset+=state.size;draw()});
   }
-  workspace.querySelector('#hrm-search').oninput=event=>{query=event.target.value;offset=0;draw()};draw();
+  listBindings(workspace,state,draw);draw();
   workspace.querySelector('#hrm-add')?.addEventListener('click',()=>openEditor('people',schema,null,viewOwner,{isCurrent}));
   workspace.querySelector('#hrm-export')?.addEventListener('click',async()=>{try{download(await api(scopedHrm('hrm/reports/people.xlsx')),'Nikan-Personnel.xlsx')}catch(err){if(isCurrent()&&err.name!=='AbortError')notice(err.message)}});
-  table.onclick=async event=>{const button=event.target.closest('[data-directory-edit]');if(!button||workspaceSaving||!isCurrent())return;try{const person=await api(scopedHrm('hrm/people/'+button.dataset.directoryEdit,cid,false));if(isCurrent())openEditor('people',schema,person,viewOwner,{isCurrent})}catch(err){if(isCurrent()&&err.name!=='AbortError')notice(err.message)}};
+  table.onclick=async event=>{if(workspaceSaving||!isCurrent())return;if(changeSort(event,state,draw))return;const button=event.target.closest('[data-directory-edit]');if(!button||workspaceSaving||!isCurrent())return;try{const person=await api(scopedHrm('hrm/people/'+button.dataset.directoryEdit,cid,false));if(isCurrent())openEditor('people',schema,person,viewOwner,{isCurrent})}catch(err){if(isCurrent()&&err.name!=='AbortError')notice(err.message)}};
  }
  async function renderPersonWorkspace(target,viewOwner){
   if(!inPersonWorkspace()){target.innerHTML='<div class="empty"><h2>فردی انتخاب نشده است</h2><button data-person-directory>فهرست کارکنان</button></div>';target.querySelector('[data-person-directory]').onclick=()=>navigateTo('hrm_personnel');return;}
@@ -484,10 +536,39 @@
   target.querySelectorAll('[data-hrm-dashboard]').forEach(button=>button.onclick=()=>{dashboardSection=button.dataset.hrmDashboard;renderCurrent()});
   target.querySelectorAll('[data-hrm-open]').forEach(button=>button.onclick=()=>navigateTo(button.dataset.hrmOpen));
   const alerts=target.querySelector('#hrm-alerts');
-  for(const [key,title,columns] of [['contract_alerts','قراردادهای نزدیک به پایان',['employee_name','number','end_date','days_remaining']],['hse_alerts','پیگیری‌های ایمنی و تجهیزات حفاظت فردی',['employee_name','ppe_name','missing_quantity','next_due_date','overdue','review_required']],['medical_alerts','سررسید معاینات مجاز',['employee_name','exam_type','next_review_date','status']],['assignment_reviews','بازنگری الزامات پس از تغییر محل فعالیت',['employee_name','target_site_id','activity_location','reason','review_required']]])if(data[key]?.length)alerts.insertAdjacentHTML('beforeend','<div class="panel"><h2>'+title+'</h2>'+simpleTable(data[key],columns,{person_links:true,person_module:key==='contract_alerts'?'contracts':key==='medical_alerts'?'health':key==='assignment_reviews'?'personnel':'hse'})+'</div>');
-  if(data.companies?.length)alerts.insertAdjacentHTML('beforeend','<div class="panel"><h2>مقایسه شرکت‌های مجاز</h2>'+simpleTable(data.companies,Object.keys(data.companies[0]).filter(key=>key!=='id'&&!key.endsWith('_id')),{fields:[{key:'name',label:'شرکت'}]})+'</div>');
-  if(data.sites?.length)alerts.insertAdjacentHTML('beforeend','<div class="panel"><h2>مقایسه سایت‌های مجاز</h2>'+simpleTable(data.sites,Object.keys(data.sites[0]).filter(key=>key!=='id'&&!key.endsWith('_id')),{fields:[{key:'name',label:'سایت'},{key:'company_name',label:'شرکت'}]})+'</div>');
+  const followup=document.createElement('section');followup.id='hrm-management-overview';followup.setAttribute('aria-label','مرکز پیگیری مدیریتی');
+  alerts.before(followup);loadManagementOverview(followup,viewOwner,section);
+  for(const [key,title,columns] of [['contract_alerts','قراردادهای نزدیک به پایان',['employee_name','number','end_date','days_remaining']],['hse_alerts','پیگیری‌های ایمنی و تجهیزات حفاظت فردی',['employee_name','ppe_name','missing_quantity','next_due_date','overdue','review_required']],['medical_alerts','سررسید معاینات مجاز',['employee_name','exam_type','next_review_date','status']],['assignment_reviews','بازنگری الزامات پس از تغییر محل فعالیت',['employee_name','target_site_id','activity_location','reason','review_required']]])if(data[key]?.length)alerts.insertAdjacentHTML('beforeend','<details class="panel hrm-dashboard-details"><summary>'+title+' — جدول جزئیات</summary>'+simpleTable(data[key],columns,{person_links:true,person_module:key==='contract_alerts'?'contracts':key==='medical_alerts'?'health':key==='assignment_reviews'?'personnel':'hse'})+'</details>');
+  if(data.companies?.length)alerts.insertAdjacentHTML('beforeend','<details class="panel hrm-dashboard-details"><summary>مقایسه شرکت‌های مجاز</summary>'+simpleTable(data.companies,Object.keys(data.companies[0]).filter(key=>key!=='id'&&!key.endsWith('_id')),{fields:[{key:'name',label:'شرکت'}]})+'</details>');
+  if(data.sites?.length)alerts.insertAdjacentHTML('beforeend','<details class="panel hrm-dashboard-details"><summary>مقایسه سایت‌های مجاز</summary>'+simpleTable(data.sites,Object.keys(data.sites[0]).filter(key=>key!=='id'&&!key.endsWith('_id')),{fields:[{key:'name',label:'سایت'},{key:'company_name',label:'شرکت'}]})+'</details>');
   if(data.data_quality?.length)alerts.insertAdjacentHTML('beforeend','<div class="panel"><h2>اطلاعات ناقص و کیفیت داده‌ها</h2><ul>'+data.data_quality.map(item=>'<li>'+esc(typeof item==='string'?item:item.message||item.label||item.title||JSON.stringify(item))+'</li>').join('')+'</ul></div>');
+ }
+ async function loadManagementOverview(target,viewOwner,section){
+  const valid=()=>current(viewOwner)&&target.isConnected;
+  target.innerHTML='<div class="panel hrm-management-loading" role="status" aria-live="polite">در حال بررسی موارد قابل پیگیری در محدوده مجاز…</div>';
+  try{
+   const response=await api(scopedHrm('hrm/management-overview'));if(!valid())return;
+   const personnelModules=new Set(['personnel','contracts','documents','attendance','performance','productivity','discipline','loans','welfare','accommodation']);
+   const categories=(response.categories||[]).filter(category=>section==='holding'||section==='personnel'&&personnelModules.has(category.module)||section==='health_environment'&&['health','health_environment'].includes(category.module)||category.module===section);
+   const count=categories.filter(category=>category.count>0).length;
+   target.innerHTML='<div class="panel hrm-management-header"><div class="hrm-section-heading"><div><p class="eyebrow">پیگیری مدیریتی</p><h2>از وضعیت پرونده تا اقدام بعدی</h2><p class="help">مبنای بررسی: '+esc(dateInput(response.as_of))+' · افق سررسید '+fa(response.horizon_days)+' روز تا '+esc(dateInput(response.due_before))+'. موارد زیر وضعیت جاری‌اند و مستقل از بازه تاریخی شاخص‌های بالا محاسبه می‌شوند.</p></div><span class="pill">'+fa(count)+' حوزه نیازمند پیگیری</span></div></div>'+(categories.length?'<div class="hrm-attention-grid">'+categories.map((category,index)=>'<article class="panel hrm-attention-card '+(category.count>0?'has-attention':'')+'" data-management-category="'+esc(category.key)+'"><div class="hrm-attention-title"><h3>'+esc(category.title)+'</h3><strong aria-label="تعداد موارد">'+(category.count===null||category.count===undefined?'—':fa(category.count))+'</strong></div><p class="help">'+esc(category.description||'')+'</p><span class="hrm-attention-state">'+esc(category.status==='scope_too_large'?'برای بررسی، شرکت یا سایت کوچک‌تری انتخاب کنید':category.status==='not_configured'?'مبنای لازم تعریف نشده':category.count===null||category.count===undefined?'وضعیت قابل تعیین نیست':category.count>0?'نیازمند بررسی مسئول مربوط':'موردی در این بررسی یافت نشد')+'</span>'+(category.items?.length?'<ul class="hrm-attention-items">'+category.items.map((item,itemIndex)=>'<li><div><strong>'+esc(item.employee_name||item.title)+'</strong>'+(item.employee_name&&item.title?'<span>'+esc(item.title)+'</span>':'')+'<small>'+esc(item.detail||'')+(item.due_date?' · '+esc(dateInput(item.due_date)):'')+'</small></div>'+(item.target?'<button type="button" class="quiet" data-management-category-index="'+index+'" data-management-item-index="'+itemIndex+'" aria-label="بررسی '+esc(item.employee_name||item.title)+'">بررسی</button>':'')+'</li>').join('')+'</ul>':'')+(category.truncated?'<p class="help">نمایش '+fa(category.items?.length||0)+' نمونه از '+fa(category.count)+' مورد؛ فهرست کامل را در بخش مربوط بررسی کنید.</p>':'')+(category.target?'<button type="button" class="quiet hrm-attention-open" data-management-category-index="'+index+'">باز کردن بخش مربوط</button>':'')+'</article>').join('')+'</div>':'<div class="panel"><p class="help">برای این داشبورد، مجوز مشاهده حوزه‌های پیگیری تعریف نشده است.</p></div>');
+   target.onclick=async event=>{
+    const button=event.target.closest('[data-management-category-index]');if(!button||workspaceSaving||!valid())return;
+    const category=categories[Number(button.dataset.managementCategoryIndex)],item=button.dataset.managementItemIndex===undefined?null:category?.items?.[Number(button.dataset.managementItemIndex)],destination=item?.target||category?.target;
+    if(!destination)return;
+    button.disabled=true;
+    try{
+     if(destination.company_id&&Number(destination.company_id)!==Number(cid)){
+      if(!user.companies.some(company=>Number(company.id)===Number(destination.company_id)))throw Error('شرکت این سابقه در محدوده قابل انتخاب نیست.');
+      setCompanyChoices(user.companies,Number(destination.company_id));
+     }
+     ensureFilters();delete activeFilters.from_date;delete activeFilters.to_date;
+     if(destination.employee_id)await openPersonWorkspace(Number(destination.employee_id),{module:category.module,resource:destination.resource||''});
+     else if(destination.resource)await window.nikanHrmOpenResource(destination.resource,{module:category.module});
+     else if(destination.page)await navigateTo(destination.page);
+    }catch(err){if(user&&err.name!=='AbortError')notice(err.message)}finally{if(button.isConnected)button.disabled=false;}
+   };
+  }catch(err){if(valid()&&err.name!=='AbortError'){target.innerHTML='<div class="panel hrm-management-error" role="alert"><h3>دریافت موارد پیگیری انجام نشد</h3><p>'+esc(err.message)+'</p><button type="button" class="quiet" data-management-retry>تلاش مجدد</button></div>';target.querySelector('[data-management-retry]').onclick=()=>loadManagementOverview(target,viewOwner,section);}}
  }
  function simpleTable(rows,keys,schema={}){
   if(!rows?.length)return '<p class="help">رکوردی در این محدوده ثبت نشده است.</p>';
@@ -500,23 +581,25 @@
   const rows=asRows(response).filter(row=>!inPersonWorkspace()||!row.employee_id||Number(row.employee_id)===Number(personWorkspace.id));
   const columns=(schema.columns||schema.fields?.map(field=>field.key)||[]).map(field=>typeof field==='string'?field:field.key);
   const editable=schema.editable!==false&&schemaCan(schema,'edit'),deletable=schema.deletable===true&&schemaCan(schema,'delete');
-  workspace.innerHTML=`${schema.help?'<p class="help hrm-resource-help">'+esc(schema.help)+'</p>':''}<div class="toolbar hrm-toolbar"><label>جستجو در ${esc(schema.title)}<input id="hrm-search" autocomplete="off" placeholder="نام، کد یا متن مورد نظر"></label><div>${creatable&&schema.creatable!==false?'<button type="button" id="hrm-add">＋ ثبت '+esc(schema.singular||schema.title)+'</button>':''}${exportable?'<button type="button" class="quiet" id="hrm-export">خروجی Excel</button>':''}${key==='attendance'&&creatable?'<button type="button" class="quiet" id="hrm-attendance-import">ورود از Excel</button>':''}</div></div>${readable&&historyEnabled?'<label class="check hrm-archive-filter"><input type="checkbox" id="hrm-include-archived" '+(includeArchived?'checked':'')+'> نمایش سوابق بایگانی‌شده و ابطال‌شده</label>':''}<div id="hrm-row-status" class="help" role="status"></div><div id="hrm-table"></div><div id="hrm-related-report"></div>`;
+  const state=listView(key);
+  workspace.innerHTML=`${schema.help?'<p class="help hrm-resource-help">'+esc(schema.help)+'</p>':''}<div class="toolbar hrm-toolbar"><label>جستجو در ${esc(schema.title)}<input id="hrm-search" autocomplete="off" placeholder="نام، کد یا متن مورد نظر"></label>${listTools(state)}<div>${creatable&&schema.creatable!==false?'<button type="button" id="hrm-add">＋ ثبت '+esc(schema.singular||schema.title)+'</button>':''}${exportable?'<button type="button" class="quiet" id="hrm-export">خروجی Excel</button>':''}${key==='attendance'&&creatable?'<button type="button" class="quiet" id="hrm-attendance-import">ورود از Excel</button>':''}</div></div>${readable&&historyEnabled?'<label class="check hrm-archive-filter"><input type="checkbox" id="hrm-include-archived" '+(includeArchived?'checked':'')+'> نمایش سوابق بایگانی‌شده و ابطال‌شده</label>':''}<div id="hrm-row-status" class="help" role="status" aria-live="polite" aria-atomic="true"></div><div id="hrm-table"></div><div id="hrm-related-report"></div>`;
   workspace.querySelector('#hrm-include-archived')?.addEventListener('change',event=>{if(event.target.checked)archiveViews.add(key);else archiveViews.delete(key);renderCurrent()});
-  const table=workspace.querySelector('#hrm-table'),status=workspace.querySelector('#hrm-row-status');let query='',offset=0;
+  const table=workspace.querySelector('#hrm-table'),status=workspace.querySelector('#hrm-row-status');
   const draw=()=>{
-   const filtered=rows.filter(row=>Object.entries(row).some(([field,value])=>field!=='content'&&searchMatch(typeof value==='object'?JSON.stringify(value):cellValue(schema,field,value,row),query)));
-   if(offset>=filtered.length)offset=Math.max(0,Math.floor((filtered.length-1)/25)*25);
-   status.textContent=readable?fa(filtered.length)+' رکورد در محدوده مجاز':'این حساب مجوز مشاهده سوابق این بخش را ندارد.';
+   const filtered=orderedRows(rows.filter(row=>columns.some(field=>searchMatch(cellValue(schema,field,row[field],row),state.query))),schema,state);
+   if(state.offset>=filtered.length)state.offset=Math.max(0,Math.floor((filtered.length-1)/state.size)*state.size);
+   status.textContent=readable?fa(filtered.length)+' از '+fa(rows.length)+' رکورد مجاز'+(state.query?' · نتیجه جستجو':''):'این حساب مجوز مشاهده سوابق این بخش را ندارد.';
    const actions=editable||deletable||(key==='contracts'&&creatable)||key==='documents'||key==='people'||rows.some(row=>row.employee_id)||(key==='accord_policies'&&readable);
-   table.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr>${columns.map(field=>`<th>${esc(fieldLabel(schema,field))}</th>`).join('')}${historyEnabled?'<th>وضعیت سابقه</th>':''}${actions?'<th>عملیات</th>':''}</tr></thead><tbody>${filtered.slice(offset,offset+25).map(row=>`<tr data-hrm-row="${esc(row.id??row.employee_id)}">${columns.map(field=>`<td>${esc(cellValue(schema,field,row[field],row))}</td>`).join('')}${historyEnabled?'<td>'+esc(row.is_deleted?'بایگانی‌شده':row.status==='cancelled'||row.status==='voided'?'ابطال‌شده':'فعال')+'</td>':''}${actions?`<td class="hrm-row-actions">${schema.restorable&&editable&&row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-restore="${esc(row.id)}">بازیابی سابقه</button>`:''}${editable&&!row.is_deleted&&!accordLocked(key,row)&&(key!=='documents'||can(row.permission_group,'edit'))?`<button type="button" class="quiet" data-hrm-edit="${esc(row.id??row.employee_id)}">ویرایش</button>`:''}${deletable&&!row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-delete="${esc(row.id)}">حذف / ابطال</button>`:''}${key==='contracts'&&creatable&&!row.is_deleted?`<button type="button" class="quiet" data-hrm-renew="${esc(row.id)}">ثبت تمدید</button>`:''}${key==='personnel_actions'&&editable&&!row.applied?`<button type="button" class="quiet" data-hrm-apply="${esc(row.id)}">اجرای حکم</button>`:''}${key==='documents'?`<button type="button" class="quiet" data-hrm-file="${esc(row.id)}">دریافت فایل</button>`:''}${key==='accord_policies'&&readable?`<button type="button" class="quiet" data-hrm-accord-review="${esc(row.id)}">محاسبه و بررسی</button>`:''}${(key==='people'||row.employee_id)&&!inPersonWorkspace()?personLink(row,schema.module,key):''}</td>`:''}</tr>`).join('')}</tbody></table></div>${pager(offset,25,filtered.length)}`:'<div class="empty"><h2>رکوردی پیدا نشد</h2><p>'+esc(query?'عبارت دیگری جستجو کنید.':'برای این محدوده هنوز اطلاعاتی ثبت نشده است.')+'</p></div>';
-   bindPager(table,()=>{offset-=25;draw()},()=>{offset+=25;draw()});
+   table.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr>${columns.map(field=>listHeader(schema,field,state)).join('')}${historyEnabled?'<th>وضعیت سابقه</th>':''}${actions?'<th>عملیات</th>':''}</tr></thead><tbody>${filtered.slice(state.offset,state.offset+state.size).map(row=>`<tr data-hrm-row="${esc(row.id??row.employee_id)}">${columns.map(field=>`<td>${esc(cellValue(schema,field,row[field],row))}</td>`).join('')}${historyEnabled?'<td>'+esc(row.is_deleted?'بایگانی‌شده':row.status==='cancelled'||row.status==='voided'?'ابطال‌شده':'فعال')+'</td>':''}${actions?`<td class="hrm-row-actions">${schema.restorable&&editable&&row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-restore="${esc(row.id)}">بازیابی سابقه</button>`:''}${editable&&!row.is_deleted&&!accordLocked(key,row)&&(key!=='documents'||can(row.permission_group,'edit'))?`<button type="button" class="quiet" data-hrm-edit="${esc(row.id??row.employee_id)}">ویرایش</button>`:''}${deletable&&!row.is_deleted&&!accordLocked(key,row)?`<button type="button" class="quiet" data-hrm-delete="${esc(row.id)}">حذف / ابطال</button>`:''}${key==='contracts'&&creatable&&!row.is_deleted?`<button type="button" class="quiet" data-hrm-renew="${esc(row.id)}">ثبت تمدید</button>`:''}${key==='personnel_actions'&&editable&&!row.applied?`<button type="button" class="quiet" data-hrm-apply="${esc(row.id)}">اجرای حکم</button>`:''}${key==='documents'?`<button type="button" class="quiet" data-hrm-file="${esc(row.id)}">دریافت فایل</button>`:''}${key==='accord_policies'&&readable?`<button type="button" class="quiet" data-hrm-accord-review="${esc(row.id)}">محاسبه و بررسی</button>`:''}${(key==='people'||row.employee_id)&&!inPersonWorkspace()?personLink(row,schema.module,key):''}</td>`:''}</tr>`).join('')}</tbody></table></div>${listPager(state,filtered.length)}`:'<div class="empty"><h2>رکوردی پیدا نشد</h2><p>'+esc(state.query?'عبارت دیگری جستجو کنید یا جستجو و ترتیب را پاک کنید.':'برای این محدوده هنوز اطلاعاتی ثبت نشده است.')+'</p></div>';
+   bindPager(table,()=>{state.offset-=state.size;draw()},()=>{state.offset+=state.size;draw()});
   };
-  workspace.querySelector('#hrm-search').oninput=event=>{query=event.target.value;offset=0;draw()};draw();
+  listBindings(workspace,state,draw);draw();
   workspace.querySelector('#hrm-add')?.addEventListener('click',()=>openEditor(key,schema,null,viewOwner,{isCurrent}));
   if(exportable)workspace.querySelector('#hrm-export').onclick=async()=>{try{download(await api(scopedHrm('hrm/reports/'+key+'.xlsx'+(includeArchived?'?include_deleted=1':''))),'Nikan-HRM-'+key+'.xlsx')}catch(err){if(isCurrent()&&err.name!=='AbortError')notice(err.message)}};
   workspace.querySelector('#hrm-attendance-import')?.addEventListener('click',()=>attendanceImport(viewOwner));
   table.onclick=async event=>{
    if(workspaceSaving||!isCurrent())return;
+   if(changeSort(event,state,draw))return;
    const edit=event.target.closest('[data-hrm-edit]'),renew=event.target.closest('[data-hrm-renew]'),file=event.target.closest('[data-hrm-file]'),apply=event.target.closest('[data-hrm-apply]'),remove=event.target.closest('[data-hrm-delete]'),restore=event.target.closest('[data-hrm-restore]'),training=event.target.closest('[data-hrm-training]'),accord=event.target.closest('[data-hrm-accord-review]');
    const id=edit?.dataset.hrmEdit||renew?.dataset.hrmRenew||file?.dataset.hrmFile||apply?.dataset.hrmApply||remove?.dataset.hrmDelete||restore?.dataset.hrmRestore||training?.dataset.hrmTraining||accord?.dataset.hrmAccordReview;
    const row=rows.find(item=>String(item.id??item.employee_id)===String(id));if(!row)return;
@@ -552,12 +635,12 @@
  function dialogShell(title,content,submit='ذخیره اطلاعات'){
   const dialog=ensureDialog();if(dialog.open||workspaceSaving)return null;
   editorDirty=false;editorBusy=false;editorOwner=owner();
-  dialog.innerHTML='<form id="hrm-form"><div class="dialog-head"><h2 id="hrm-editor-title">'+esc(title)+'</h2><button type="button" class="quiet" data-hrm-close aria-label="بستن فرم">✕</button></div>'+content+'<p id="hrm-form-error" class="error" role="alert"></p><div class="toolbar"><button type="submit" id="hrm-save">'+esc(submit)+'</button><button type="button" class="quiet" data-hrm-close>انصراف</button></div></form>';
+  dialog.innerHTML='<form id="hrm-form"><div class="dialog-head"><h2 id="hrm-editor-title">'+esc(title)+'</h2><button type="button" class="quiet" data-hrm-close aria-label="بستن فرم">✕</button></div>'+content+'<p id="hrm-form-error" class="error" role="alert"></p><div class="toolbar hrm-dialog-actions"><button type="submit" id="hrm-save">'+esc(submit)+'</button><button type="button" class="quiet" data-hrm-close>انصراف</button><small class="help">علامت * یعنی تکمیل فیلد الزامی است.</small></div></form>';
   dialog.querySelectorAll('[data-hrm-close]').forEach(button=>button.onclick=closeDialog);dialog.showModal();return dialog;
  }
  function fieldHtml(field,value,options=null,readonly=false){
-  const key=field.key,label=field.label||key,type=field.type||'text',required=Boolean(field.required);
-  let input='',attrs=`name="${esc(key)}" id="hrm-field-${esc(key)}" ${required?'required':''} ${field.max_length?`maxlength="${Number(field.max_length)}"`:''}`;
+  const key=field.key,label=field.label||key,type=field.type||'text',required=Boolean(field.required),description=field.help||field.description||(type==='date'?'تاریخ شمسی به صورت سال/ماه/روز؛ مثال '+currentJalaliDate():'');
+  let input='',attrs=`name="${esc(key)}" id="hrm-field-${esc(key)}" ${required?'required aria-required="true"':''} ${description?'aria-describedby="hrm-help-'+esc(key)+'"':''} ${field.max_length?`maxlength="${Number(field.max_length)}"`:''}`;
   if(type==='textarea'||field.multiline)input=`<textarea ${attrs} rows="3" ${readonly?'readonly':''}>${esc(value??field.default??'')}</textarea>`;
   else if(options||type==='select'||type==='boolean'||type==='checkbox'){
    const items=options||((type==='boolean'||type==='checkbox')?[[1,'بله'],[0,'خیر']]:choicesOf(field));
@@ -565,8 +648,7 @@
   }else if(type==='date')input=`<input ${attrs} type="text" inputmode="numeric" dir="ltr" placeholder="${currentJalaliDate()}" value="${esc(dateInput(value??field.default??''))}" ${readonly?'readonly':''}>`;
   else if(type==='number'||type==='integer'||type==='money')input=`<input ${attrs} type="number" dir="ltr" step="${esc(field.step??(type==='integer'||type==='money'?1:'any'))}" ${field.minimum!==undefined||field.min!==undefined?`min="${esc(field.minimum??field.min)}"`:''} ${field.maximum!==undefined||field.max!==undefined?`max="${esc(field.maximum??field.max)}"`:''} value="${esc(value??field.default??'')}" ${readonly?'readonly':''}>`;
   else input=`<input ${attrs} type="${['email','tel','password'].includes(type)?type:'text'}" value="${type==='password'?'':esc(value??field.default??'')}" ${readonly?'readonly':''} autocomplete="${type==='password'?'new-password':'off'}">`;
-  const description=field.help||field.description||'';
-  return `<label class="${type==='textarea'||field.multiline?'hrm-wide':''}" data-hrm-field="${esc(key)}">${esc(label)}${required?' <span aria-hidden="true">*</span>':''}${input}${description?'<small class="help">'+esc(description)+'</small>':''}</label>`;
+  return `<label class="${type==='textarea'||field.multiline?'hrm-wide':''}" data-hrm-field="${esc(key)}">${esc(label)}${required?' <span class="hrm-required" aria-hidden="true">*</span>':''}${input}${description?'<small id="hrm-help-'+esc(key)+'" class="help">'+esc(description)+'</small>':''}</label>`;
  }
  async function referenceOptions(field,schema,viewOwner,operation='read',referenceCompany=undefined){
   if(referenceCompany===undefined)referenceCompany=field.key==='target_site_id'?null:cid;

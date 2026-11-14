@@ -71,7 +71,7 @@ def _schema_for_actor(raw, actor):
     return schemas
 
 
-def _staff(conn, module):
+def _staff(conn, module, filters=None):
     predicate, values = scope_sql(conn, module, 'e')
     rows = [dict(row) for row in conn.execute(
         'SELECT e.id,e.code,e.name,' + effective_column(conn, 'company_id') + ' company_id,'
@@ -79,18 +79,19 @@ def _staff(conn, module):
         + effective_column(conn, 'job') + ' job,hd.site_id,hd.location,hd.status '
         'FROM employees e LEFT JOIN hrm_employee_details hd ON hd.employee_id=e.id '
         'WHERE ' + predicate + ' ORDER BY e.id', values)]
-    return filter_rows(conn, rows, module, staff_rows=True)
+    return filter_rows(conn, rows, module, staff_rows=True, args=filters)
 
 
-def filter_rows(conn, rows, module, staff_rows=False):
+def filter_rows(conn, rows, module, staff_rows=False, args=None):
     """Apply the same explicit reporting filters to JSON, dashboards and XLSX."""
-    cid = request.args.get('company_id')
+    args = request.args if args is None else args
+    cid = args.get('company_id')
     if cid:
         cid = positive_id(cid)
         actor = require(conn,module)
         if not actor.get('is_primary_admin') and cid not in actor['company_ids']:
             raise PermissionError()
-    site = request.args.get('site_id')
+    site = args.get('site_id')
     site = positive_id(site) if site else None
     if site:
         record = conn.execute('SELECT id,company_id FROM hrm_sites WHERE id=?', (site,)).fetchone()
@@ -101,14 +102,14 @@ def filter_rows(conn, rows, module, staff_rows=False):
                         (not s.get('site_id') or s['site_id'] == site) for s in actor['scopes'])
         if not permitted:
             raise PermissionError()
-    department = request.args.get('department', '').strip()
-    eid = request.args.get('employee_id')
+    department = args.get('department', '').strip()
+    eid = args.get('employee_id')
     eid = positive_id(eid) if eid else None
-    start = date_value(request.args.get('from_date'))
-    end = date_value(request.args.get('to_date'))
+    start = date_value(args.get('from_date'))
+    end = date_value(args.get('to_date'))
     if start and end and end < start:
         raise ValueError('پایان بازه پیش از شروع است')
-    query = request.args.get('q', '').strip().casefold()
+    query = args.get('q', '').strip().casefold()
     staff = {}
     if any((site, department)) and not staff_rows:
         for row in conn.execute('SELECT employee_id,company_id,site_id,department FROM hrm_employee_details'):

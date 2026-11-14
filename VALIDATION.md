@@ -1,20 +1,23 @@
-# اعتبارسنجی Nikan HRM ۰٫۱۴
+# اعتبارسنجی Nikan HRM ۰٫۱۵
 
-گزارش جاری در [validation-0.14.md](docs/validation-0.14.md) و فایل‌های JSON/XML همراه آن ثبت می‌شود. گزارش‌های نسخه‌های قبلی صرفاً سابقه همان انتشارها هستند.
+گزارش جاری در [validation-0.15.md](docs/validation-0.15.md) و فایل‌های JSON/XML همراه آن ثبت می‌شود. گزارش‌های نسخه‌های قبلی صرفاً سابقه همان انتشارها هستند.
 
 ## اجرای مجدد
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q --junitxml=docs/pytest-0.14-final.xml
+.venv/bin/python -m pytest -q --junitxml=docs/pytest-0.15-final.xml
 .venv/bin/python tests/browser_hrm_smoke.py
 .venv/bin/python tests/browser_org_accord_smoke.py
 .venv/bin/python tests/browser_person_workspace_smoke.py
+.venv/bin/python tests/browser_management_workspace_smoke.py
 .venv/bin/python packaging/validate_hrm_payload.py --install . --report /tmp/hrm-source-result.json
 ```
 
 مرورگر آزمون از `/usr/bin/chromium` استفاده می‌کند. داده‌ها، کاربران، مدارک و کلیدهای آزمون مصنوعی و موقت‌اند. آزمون مهاجرت، داده را با سورس تاریخی واقعی ۰٫۱۰ و ۰٫۱۱٫۲ تولید و مقادیر اصلی را پس از ارتقا، شروع مجدد و بازیابی مقایسه می‌کند.
+
+نسخه ۰٫۱۵ پوسته، گردش فهرست و نمای مدیریتی روی منابع موجود را توسعه می‌دهد؛ markerهای ساختار پایگاه ۰٫۱۴ را تغییر نمی‌دهد. شماره نسخه نصاب، نسخه محصول است و لزوماً شماره Migration تازه نیست.
 
 ## مرز بررسی ویندوز
 

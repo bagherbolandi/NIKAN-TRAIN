@@ -4,6 +4,7 @@ Uses a temporary data directory and an actual Flask server. Run with
 .venv/bin/python tests/browser_hrm_smoke.py (Chromium at /usr/bin/chromium).
 """
 from io import BytesIO
+import json
 import os
 from pathlib import Path
 import secrets
@@ -18,9 +19,12 @@ from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright, expect
 
 PASSWORD = 'Browser-HRM-' + secrets.token_urlsafe(18)
+ARTIFACTS = Path(os.environ.get('NIKAN_BROWSER_ARTIFACTS', tempfile.gettempdir()))
 
 
 def check(base):
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    checks = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path=os.environ.get('NIKAN_CHROMIUM', '/usr/bin/chromium'),
                                      headless=True, args=['--no-sandbox'])
@@ -42,6 +46,7 @@ def check(base):
             assert page.locator('[data-hrm-metric]').count() > 0
             initial = page.request.get(base + '/api/hrm/dashboard?section=holding').json()
             assert any(metric.get('missing') or metric.get('value') is None for metric in initial['metrics']), initial
+            checks.append('primary holding account has all seven companies, four domain dashboards and explicit missing metrics')
             csrf = page.request.get(base + '/api/me').json()['csrf']
 
             def api(method, path, data=None, status=200, client=None, token=None):
@@ -78,13 +83,19 @@ def check(base):
                 'code': 'HRM-BROWSER-003', 'name': 'همکار شرکت دیگر', 'company_id': 2,
                 'site_id': site3, 'department': 'تولید', 'job': 'کارشناس', 'status': 'active'}, 201)['id']
             # Form edit respects the optimistic version and keeps the central id.
-            page.locator(f'[data-hrm-edit="{eid}"]').click()
+            page.locator(f'[data-directory-edit="{eid}"]').click()
             page.locator('#hrm-form [name=phone]').fill('09120000000')
             page.locator('#hrm-save').click()
             page.locator('#hrm-editor').wait_for(state='hidden')
+            updated_person = api('GET', f'hrm/people/{eid}?company_id=1')
+            assert updated_person['phone'] == '09120000000' and updated_person['id'] == eid
+            assert updated_person['version'] > person['version']
+            stale = page.request.put(base + f'/api/hrm/people/{eid}?company_id=1',
+                headers={'X-CSRF-Token': csrf}, data={'version': person['version'], 'phone': 'STALE-REJECTED'})
+            assert stale.status == 409, stale.text()
             assert api('GET', f'hrm/people/{eid}?company_id=1')['phone'] == '09120000000'
             page.locator('#hrm-search').fill('not-an-existing-record')
-            expect(page.locator('#hrm-table')).to_contain_text('رکوردی پیدا نشد')
+            expect(page.locator('#hrm-table')).to_contain_text('پرونده‌ای در این محدوده پیدا نشد')
             page.locator('#hrm-search').fill('')
 
             # Company/site/unit/date filters are sent to the server, including exports.
@@ -97,6 +108,7 @@ def check(base):
             assert Path(saved.value.path()).read_bytes().startswith(b'PK')
             page.locator('#hrm-clear-filters').click()
             expect(page.locator('#hrm-table tbody tr')).to_have_count(2)
+            checks.append('central directory creates and edits one identity, rejects stale version, searches and applies scope to XLSX export')
 
             # Renewals append a linked contract; uploads/downloads retain real bytes.
             page.locator('[data-page=hrm_contracts]').click()
@@ -136,6 +148,7 @@ def check(base):
             page.locator('#hrm-save').click()
             page.locator('#hrm-editor').wait_for(state='hidden')
             expect(page.locator('#hrm-table')).to_contain_text('مدرک آزمایشی اصلاح‌شده')
+            checks.append('contract renewal appends linked history and protected document upload/download/edit preserves exact bytes')
 
             # The actual Excel template is populated, previewed, and then committed.
             page.locator('[data-page=hrm_attendance]').click()
@@ -159,6 +172,7 @@ def check(base):
             page.locator('#hrm-save').click()
             page.locator('#hrm-import-preview').get_by_text('نتیجه ثبت').wait_for()
             assert len(api('GET', 'hrm/attendance?company_id=1')) == 1
+            checks.append('attendance workbook preview is read-only, commit writes once, archive hides and restore recovers the original record')
             page.locator('#hrm-editor [data-hrm-close]').first.click()
             page.locator('[data-hrm-delete]').wait_for()
             page.once('dialog', lambda dialog: dialog.accept())
@@ -224,6 +238,7 @@ def check(base):
             expect(page.locator('#hrm-table tbody tr')).to_have_count(1)
             report = api('GET', 'hrm/training_report?company_id=1&site_id=' + str(site1))
             assert report['metrics']['actual_person_hours'] == 2, report
+            checks.append('training course, actual attendance, assessment and site requirement forms share the existing training identities')
             page.screenshot(path='/tmp/nikan-hrm-training.png', full_page=True)
             foreign_course = api('POST', 'hrm/training_courses?company_id=1', {
                 'company_id': 1, 'site_id': site2, 'department': 'تولید', 'competency_code': competency_code,
@@ -247,6 +262,7 @@ def check(base):
                     expect(page.locator('#hrm-alerts')).to_contain_text('نیازمند بازنگری')
                     page.screenshot(path='/tmp/nikan-hrm-safety.png', full_page=True)
             page.screenshot(path=os.environ.get('NIKAN_HRM_SCREENSHOT', '/tmp/nikan-hrm-dashboard.png'), full_page=True)
+            checks.append('all operational workspaces and four domain dashboards plus holding render; temporary work queues a visible PPE review')
 
             # A site-scoped HR/Safety officer can create but cannot edit/export or read medicine.
             restricted_password = 'Restricted-' + secrets.token_urlsafe(18)
@@ -266,13 +282,14 @@ def check(base):
             local.locator('[data-hrm-resource=people]').click()
             expect(local.locator('#hrm-table tbody tr')).to_have_count(1)
             assert local.locator('#hrm-add').count() == 1
-            assert local.locator('[data-hrm-edit],#hrm-export,[data-page=hrm_access],[data-page=hrm_health_environment]').count() == 0
+            assert local.locator('[data-hrm-edit],[data-directory-edit],#hrm-export,[data-page=hrm_access],[data-page=hrm_health_environment]').count() == 0
             local_csrf = restricted.request.get(base + '/api/me').json()['csrf']
             for path in (f'hrm/people/{foreign}', f'hrm/people/{other_company}', 'hrm/health_records?company_id=1', 'hrm/reports/people.xlsx?company_id=1'):
                 response = restricted.request.get(base + '/api/' + path)
                 assert response.status == 403, (path, response.status, response.text())
             response = restricted.request.put(base + f'/api/hrm/people/{eid}?company_id=1', headers={'X-CSRF-Token': local_csrf}, data={'version': person['version'], 'phone': '123'})
             assert response.status == 403, response.text()
+            checks.append('site and department scoped personnel/safety account cannot edit, export, read another company/site or access clinical records')
             # A create-only grant can open selectors and save without reading full rows.
             api('PUT', 'hrm/access/users/' + str(created['id']), {'role': 'company_hr',
                  'scopes': [{'company_id': 1, 'site_id': site1, 'department': 'تولید'}],
@@ -305,6 +322,7 @@ def check(base):
             local.locator('#auth [name=password]').fill(restricted_password)
             local.locator('#auth button').click(); local.locator('#shell').wait_for(state='visible')
             assert local.locator('#nav [data-page=hrm_personnel]').count() == 0
+            checks.append('create-only personnel permission can save without reading rows; revocation terminates stale session rights')
 
             # A mixed document grant chooses the writable group, while read-only groups stay read-only.
             upload_password = 'Upload-' + secrets.token_urlsafe(18)
@@ -329,6 +347,7 @@ def check(base):
             created_doc = next(row for row in api('GET', 'hrm/documents?company_id=1') if row['title'] == 'ثبت با مجوز مستقل مدرک')
             assert upload_context.request.get(base + '/api/hrm/documents/' + str(created_doc['id']) + '/file').status == 403
             upload_context.close()
+            checks.append('mixed document permissions select the writable group while preserving independent file-read permission')
 
             # A site-only training manager performs CRUD through the protected facade.
             training_password = 'Training-' + secrets.token_urlsafe(18)
@@ -367,6 +386,7 @@ def check(base):
                 headers={'X-CSRF-Token': training_csrf}, data={'employee_id': foreign, 'course_id': course['id'], 'level': 1}).status == 403
             training_page.screenshot(path='/tmp/nikan-hrm-site-training.png', full_page=True)
             training_context.close()
+            checks.append('site-only training officer creates and edits local courses while legacy API and foreign-site/person writes stay forbidden')
 
             # Access editor exposes all independent rights and site scope rows.
             page.locator('#nav [data-page=hrm_access]').click()
@@ -389,12 +409,22 @@ def check(base):
             page.locator('#hrm-editor').wait_for(state='hidden')
             manager = next(row for row in api('GET', 'hrm/access/users') if row['username'] == 'ui-holding-manager')
             assert manager['role'] == 'holding_manager' and manager['all_companies']
+            checks.append('access editor exposes independent read/create/edit/delete/export grants and creates an explicitly scoped holding manager')
             page.set_viewport_size({'width': 390, 'height': 844})
+            page.locator('#workspace-menu-toggle').click()
             page.locator('#nav [data-page=hrm_dashboard]').click()
-            page.locator('#hrm-filters').wait_for()
+            page.locator('#hrm-filters').wait_for(state='attached')
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'mobile horizontal overflow'
+            expect(page.locator('.hrm-filter-disclosure')).not_to_have_attribute('open', '')
+            page.locator('.hrm-filter-disclosure summary').click()
+            expect(page.locator('#hrm-filters')).to_be_visible()
             page.screenshot(path='/tmp/nikan-hrm-mobile.png', full_page=True)
             assert not errors, errors
+            checks.append('mobile drawer navigation reaches dashboard without overflow and compact filters open on demand; no JavaScript errors')
+            (ARTIFACTS / 'hrm-0.15-hrm-regression-browser.json').write_text(json.dumps({
+                'passed': True, 'platform': sys.platform, 'native_windows_execution': False,
+                'checks': checks, 'javascript_errors': errors,
+            }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
             restricted.close(); browser.close()
             print('HRM browser passed: central person CRUD, contract renewal, document bytes/edit/mixed grants, attendance Excel preview/commit and archive/restore, training course/record/assessment/requirement forms and actual attendance, site-only training CRUD, filters/exports, four dashboards plus holding, company/site/operation isolation and revocation, desktop/mobile; no JavaScript errors.')
         except BaseException:

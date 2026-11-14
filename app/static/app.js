@@ -25,7 +25,8 @@ async function api(path,options={}){
  try{response=await fetch('/api/'+path,options)}catch(err){if(err.name==='AbortError')throw err;throw Error('ارتباط با سامانه برقرار نشد. اتصال را بررسی و دوباره تلاش کنید.')}
  if(account!==user||(isRead&&version!==navigationVersion))throw staleRequest();
  if(!response.ok){
-  const result=await response.json().catch(()=>({})),err=Error(result.error||'دریافت پاسخ سامانه انجام نشد. دوباره تلاش کنید.');err.status=response.status;err.data=result;
+  const result=await response.json().catch(()=>({})),err=Error(result.error||'دریافت پاسخ سامانه انجام نشد. دوباره تلاش کنید.');err.status=response.status;err.data=result;err.requestId=result.request_id||response.headers.get('X-Request-ID');
+  if(response.status>=500&&err.requestId)err.message+=' · کد پیگیری: '+err.requestId;
   if(account!==user||(isRead&&version!==navigationVersion))throw staleRequest();
   if(response.status===401&&user===account&&user)resetSession('نشست شما پایان یافته است. دوباره وارد شوید.');
   throw err;
@@ -82,7 +83,7 @@ async function load(){
   if(user){navigationFailure(err);return}
   $('#login-error').textContent=err.message;let retry=$('#retry-login-state');if(!retry){retry=document.createElement('button');retry.id='retry-login-state';retry.type='button';retry.className='quiet';retry.textContent='تلاش مجدد برای اتصال';$('#login-error').after(retry)}retry.onclick=()=>load();return;
  }
- user=account;if(account.deployment_mode==='test'){$('.aside-bottom').textContent='نسخه آزمایشی · داده‌های مستقل';$('footer').textContent='نسخه آزمایشی منابع انسانی نیکان · داده‌های این نسخه مستقل از سامانه عملیاتی هستند'}if(account.deployment_mode==='server'){$('.aside-bottom').textContent='سرور مرکزی · دیتابیس هلدینگ';$('footer').textContent='سامانه یکپارچه منابع انسانی نیکان · نسخه شبکه ۰٫۱۱ · اطلاعات شرکت‌ها با دسترسی تفکیک‌شده'}page='dashboard';courseCalendarScope=user.role==='admin'?'holding':'internal';courseCalendarYear=currentJalaliYear();cache={};editId=null;userReset=null;
+ user=account;if(account.deployment_mode==='test'){$('.aside-bottom').textContent='نسخه آزمایشی · داده‌های مستقل';$('footer').textContent='نسخه آزمایشی منابع انسانی نیکان · داده‌های این نسخه مستقل از سامانه عملیاتی هستند'}if(account.deployment_mode==='server'){$('.aside-bottom').textContent='سرور مرکزی · دیتابیس هلدینگ';$('footer').textContent='سامانه یکپارچه منابع انسانی نیکان · نسخه شبکه · اطلاعات شرکت‌ها با دسترسی تفکیک‌شده'}page='dashboard';courseCalendarScope=user.role==='admin'?'holding':'internal';courseCalendarYear=currentJalaliYear();cache={};editId=null;userReset=null;
  $('#retry-login-state')?.remove();$('#login').hidden=true;$('#shell').hidden=false;$('#login-error').textContent='';$('#auth [name=password]').value='';cid=user.companies[0]?.id;
  setCompanyChoices(user.companies,cid);
  menus.find(item=>item[0]==='courses')[2]=user.role==='admin'?'تقویم تجمیعی و برنامه‌ریزی هلدینگ':'آموزش‌های داخلی شرکت';

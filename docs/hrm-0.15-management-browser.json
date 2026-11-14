@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "checks": [
+    "32 authorized personnel: exact total, page size and stable natural code sorting",
+    "Arabic/Persian letters and digits, zero-width/repeated spaces normalize in local search",
+    "keyboard-sort, paging and filtered edit preserve record ID/version and list state",
+    "exact whole-rial sorting and editor retain the full supported amount",
+    "live scoped action center: bounded samples, full counts, error retry, combined health workspace and original person/resource link",
+    "mobile scope filters start folded, open accessibly and apply/reset the same scoped API filters",
+    "company/site-only reader: no foreign or medical/financial cards; 390/320 mobile without page overflow"
+  ],
+  "javascript_errors": []
+}
