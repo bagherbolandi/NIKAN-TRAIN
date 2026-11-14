@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tarfile
 
+import pytest
+
 from app import create_app
 from network.backup import encrypt, recovery_check
 
@@ -41,7 +43,17 @@ period=post('evaluation_periods',{'title':'Historical performance','site_id':sit
 criterion=post('performance_criteria',{'period_id':period,'site_id':site,'title':'Quality','weight':100,'max_score':100})['id']
 post('performance_scores',{'employee_id':person,'period_id':period,'criterion_id':criterion,'score':82})
 loan=post('loans',{'employee_id':person,'title':'Historical loan','loan_kind':'internal','amount_rials':1000001,'issued_date':'2026-11-01','status':'approved'})['id']
-result.write_text(json.dumps(dict(site=site,person=person,contract=contract,document=document,period=period,loan=loan,pdf=pdf.hex())),encoding='utf-8')
+accord=None
+if any(rule.rule=='/api/hrm/accord_policies' for rule in app.url_map.iter_rules()):
+ policy=post('accord_policies',{'company_id':1,'site_id':site,'period_id':period,'title':'Historical accord','method':'individual_base'})
+ post('accord_entries',{'policy_id':policy['id'],'employee_id':person,'base_rials':1000001,'scheduled_minutes':480,'actual_minutes':360})
+ term=next(row for row in c.get('/api/hrm/evaluation_periods?company_id=1').json if row['id']==period)
+ r=c.put('/api/hrm/evaluation_periods/'+str(period)+'?company_id=1',headers=h,json={'status':'closed','version':term['version']});assert r.status_code==200,r.json
+ report=c.get('/api/hrm/accord_report?company_id=1&policy_id='+str(policy['id'])).json
+ r=c.post('/api/hrm/accord_policies/'+str(policy['id'])+'/finalize?company_id=1',headers=h,json={'version':report['policy']['version'],'calculation_token':report['calculation_token']});assert r.status_code==200,r.json
+ accord=c.get('/api/hrm/accord_results?company_id=1').json[0]
+ assert accord['accord_rials']==615001
+result.write_text(json.dumps(dict(site=site,person=person,contract=contract,document=document,period=period,loan=loan,pdf=pdf.hex(),accord=accord)),encoding='utf-8')
 '''
 
 
@@ -58,9 +70,10 @@ def projection(database, columns=None):
     return columns, result
 
 
-def test_upgrade_0121_preserves_existing_hrm_facts_and_migration_timestamps(tmp_path):
-    old = tmp_path / 'source-0121';old.mkdir()
-    payload = subprocess.check_output(['git','archive','v0.12.1','app','network'], cwd=ROOT)
+@pytest.mark.parametrize('source_tag',['v0.12.1','v0.13.0'])
+def test_previous_hrm_source_preserves_existing_facts_and_migration_timestamps(tmp_path,source_tag):
+    old = tmp_path / 'historical-source';old.mkdir()
+    payload = subprocess.check_output(['git','archive',source_tag,'app','network'], cwd=ROOT)
     with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
         for member in archive:
             if member.isfile():
@@ -74,7 +87,7 @@ def test_upgrade_0121_preserves_existing_hrm_facts_and_migration_timestamps(tmp_
     assert process.returncode == 0, process.stdout+process.stderr
     ids = json.loads(result.read_text());database = data/'nikan.sqlite3'
     fields,before = projection(database)
-    assert {row[0] for row in before['hrm_schema_migrations']} == {'hrm-1','hrm-0.12'}
+    assert {row[0] for row in before['hrm_schema_migrations']} == ({'hrm-1','hrm-0.12','hrm-0.13'} if source_tag=='v0.13.0' else {'hrm-1','hrm-0.12'})
     key = secrets.token_bytes(32);archive = tmp_path/'historical.nikbak';encrypt(database,archive,key)
     app = create_app(data,testing=True)
     assert app.extensions['hrm_upgrade_backup']['verified']
@@ -85,13 +98,17 @@ def test_upgrade_0121_preserves_existing_hrm_facts_and_migration_timestamps(tmp_
         else:
             assert rows==after[name],name
     with closing(sqlite3.connect(database)) as conn:
-        assert {r[0] for r in conn.execute('SELECT version FROM hrm_schema_migrations')} == {'hrm-1','hrm-0.12','hrm-0.13'}
+        assert {r[0] for r in conn.execute('SELECT version FROM hrm_schema_migrations')} == {'hrm-1','hrm-0.12','hrm-0.13','hrm-0.14'}
         for name in ('hrm_accord_policies','hrm_accord_entries','hrm_accord_results'):
-            assert conn.execute('SELECT count(*) FROM '+name).fetchone()[0] == 0
+            expected=len(before.get(name,[]))
+            assert conn.execute('SELECT count(*) FROM '+name).fetchone()[0] == expected
     client=app.test_client()
     assert client.post('/api/login',json={'username':'old-admin','password':'Synthetic-013-upgrade-password-123'}).status_code==200
     person=client.get('/api/hrm/people?company_id=1').json[0]
     assert person['id']==ids['person'] and person['site_id']==ids['site']
     assert client.get(f"/api/hrm/documents/{ids['document']}/file").data==bytes.fromhex(ids['pdf'])
+    if ids.get('accord'):
+        saved=client.get('/api/hrm/accord_results?company_id=1').json[0]
+        assert saved['accord_rials']==615001 and saved['evidence']==ids['accord']['evidence']
     assert create_app(data,testing=True).extensions['hrm_upgrade_backup'] is None
     assert recovery_check(archive,key,tmp_path)['verified']

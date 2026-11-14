@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 import zipfile
+from pathlib import Path
 
 import openpyxl
 from flask import Response, g, jsonify, request
@@ -67,14 +68,16 @@ CREATE TRIGGER IF NOT EXISTS course_external_code_created AFTER INSERT ON course
 
 
 def reference_data(connection, cid, include_companies=False):
+    from .personnel_identity import current_employee_rows
     query = lambda sql, args=(): [dict(row) for row in connection.execute(sql, args)]
+    people = current_employee_rows(connection, cid)
     return dict(
         skills=query('SELECT code,title,category FROM holding_competencies ORDER BY code'),
-        employees=query('SELECT code,name,job FROM employees WHERE company_id=? ORDER BY code', (cid,)),
-        jobs=query("SELECT job,MAX(department) department FROM (SELECT job,department FROM job_profiles WHERE company_id=? UNION ALL SELECT job,department FROM employees WHERE company_id=? UNION ALL SELECT job,'' department FROM requirements WHERE company_id=?) WHERE job!='' GROUP BY job ORDER BY job", (cid, cid, cid)),
+        employees=sorted([{key: person[key] for key in ('code', 'name', 'job')} for person in people], key=lambda row: row['code']),
+        jobs=query("SELECT job,MAX(department) department FROM (SELECT job,department FROM job_profiles WHERE company_id=? UNION ALL SELECT COALESCE(d.job,e.job) job,COALESCE(d.department,e.department) department FROM employees e LEFT JOIN hrm_employee_details d ON d.employee_id=e.id WHERE COALESCE(d.company_id,e.company_id)=? UNION ALL SELECT job,'' department FROM requirements WHERE company_id=?) WHERE job!='' GROUP BY job ORDER BY job", (cid, cid, cid)),
         courses=query('SELECT external_code,title,date FROM courses WHERE company_id=? ORDER BY date,id', (cid,)),
         instructors=query('SELECT DISTINCT name FROM instructors WHERE company_id=? ORDER BY name', (cid,)),
-        departments=query("SELECT department FROM employees WHERE company_id=? AND department!='' UNION SELECT department FROM job_profiles WHERE company_id=? AND department!='' ORDER BY department", (cid, cid)),
+        departments=query("SELECT COALESCE(d.department,e.department) department FROM employees e LEFT JOIN hrm_employee_details d ON d.employee_id=e.id WHERE COALESCE(d.company_id,e.company_id)=? AND COALESCE(d.department,e.department)!='' UNION SELECT department FROM job_profiles WHERE company_id=? AND department!='' ORDER BY department", (cid, cid)),
         companies=query('SELECT id,name FROM companies' + ('' if include_companies else ' WHERE id=?') + ' ORDER BY id', () if include_companies else (cid,)),
     )
 
@@ -224,13 +227,18 @@ def write_row(connection, kind, cid, values, policy, role, validate_refs):
             return 'unchanged' if selected else 'created'
         data['skill_id'] = skill_id
     if 'employee_code' in data:
-        employee = connection.execute('SELECT id FROM employees WHERE company_id=? AND code=?', (cid, data.pop('employee_code'))).fetchone()
-        if not employee:
+        from .personnel_identity import find_current_employee
+        employee_id = find_current_employee(connection, cid, data.pop('employee_code'))
+        if employee_id is None:
             raise ValueError('کد پرسنلی در شرکت انتخاب‌شده یافت نشد')
-        data['employee_id'] = employee['id']
+        data['employee_id'] = employee_id
     if kind in ('employees', 'requirements') and data.get('job'):
-        if not connection.execute('SELECT 1 FROM job_profiles WHERE company_id=? AND job=? UNION SELECT 1 FROM employees WHERE company_id=? AND job=? UNION SELECT 1 FROM requirements WHERE company_id=? AND job=?', (cid, data['job']) * 3).fetchone():
+        if not connection.execute('SELECT 1 FROM job_profiles WHERE company_id=? AND job=? UNION SELECT 1 FROM employees e LEFT JOIN hrm_employee_details d ON d.employee_id=e.id WHERE COALESCE(d.company_id,e.company_id)=? AND COALESCE(d.job,e.job)=? UNION SELECT 1 FROM requirements WHERE company_id=? AND job=?', (cid, data['job']) * 3).fetchone():
             raise ValueError('عنوان شغل در فهرست شرکت یافت نشد؛ ابتدا شناسنامه شغل را تعریف کنید')
+    if kind == 'employees':
+        from .personnel_identity import write_legacy_employee
+        validate_refs(kind, data, cid)
+        return write_legacy_employee(connection, cid, data, policy=policy)[1]
     if kind == 'courses':
         data['external_code'] = data.pop('course_code')
         current = connection.execute('SELECT calendar_scope FROM courses WHERE company_id=? AND external_code=?', (cid, data['external_code'])).fetchone()
@@ -281,6 +289,13 @@ def write_row(connection, kind, cid, values, policy, role, validate_refs):
         existing = connection.execute('SELECT status FROM needs WHERE company_id=? AND skill_id=? AND department=? AND reason=? AND year=?', (cid, data['skill_id'], data['department'], data['reason'], data['year'])).fetchone()
         if existing and existing['status'] != 'submitted':
             raise ValueError('نیاز بررسی‌شده قفل است؛ ابتدا هلدینگ آن را بازگشایی کند')
+    if kind in ('assessments', 'records'):
+        context, key, relation = ('hrm_training_assessment_context', 'assessment_id', 'skill_id') if kind == 'assessments' else ('hrm_training_record_context', 'record_id', 'course_id')
+        managed = connection.execute('SELECT 1 FROM ' + kind + ' t JOIN ' + context + ' x ON x.' + key + '=t.id '
+                                     'WHERE t.company_id=? AND t.employee_id=? AND t.' + relation + '=?',
+                                     (cid, data['employee_id'], data[relation])).fetchone()
+        if managed:
+            raise ValueError('این سابقه نسخه‌دار است؛ برای اصلاح یا ابطال از مدیریت آموزش یا قالب یکپارچه همان بخش استفاده کنید')
     return upsert(connection, kind, cid, data, keys, policy)
 
 
@@ -309,7 +324,9 @@ def register(app, db, authenticated, company, audit, error, validate_refs):
         refs = reference_data(db(), cid, include_companies=g.user['role'] == 'admin' and form['kind'] == 'companies')
         if g.user['role'] != 'admin':
             refs.pop('companies', None)
-        return build_template(role_form(form), selected, refs, brand['content'] if brand else None)
+        default_logo = Path(__file__).resolve().parent / 'static' / 'logos' / 'nikanholding-logo.png'
+        logo = brand['content'] if brand else (default_logo.read_bytes() if default_logo.is_file() else None)
+        return build_template(role_form(form), selected, refs, logo)
 
     @app.get('/api/excel/forms')
     @authenticated

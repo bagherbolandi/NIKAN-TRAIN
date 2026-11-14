@@ -448,6 +448,22 @@ def _history(conn, eid, before, after, effective_date, source, notes=''):
                  ','.join('?' for _ in values) + ')', values)
 
 
+def training_certificate_rows(conn, eid, operation='read'):
+    """Only company-wide grants can read legacy certificates of unknown site."""
+    require(conn, 'training', operation=operation)
+    result = []
+    for item in conn.execute('SELECT id,employee_id,company_id,title,issuer,issued,expires,filename '
+                             'FROM certificates WHERE employee_id=? ORDER BY id DESC', (positive_id(eid),)):
+        row = dict(item)
+        try:
+            access.record_scope(conn, dict(company_id=row['company_id'], site_id=None, department=''),
+                                'training', operation=operation)
+        except PermissionError:
+            continue
+        result.append(row)
+    return result
+
+
 def _contract_extras(conn, values):
     values = dict(values)
     depth = 0
@@ -762,6 +778,8 @@ def register(app, db, authenticated, audit, error):
                 params.append(cid)
             if request.args.get('site_id') not in (None,''):
                 query += ' AND d.site_id=?';params.append(positive_id(request.args['site_id']))
+            if request.args.get('employee_id') not in (None, ''):
+                query += ' AND e.id=?'; params.append(positive_id(request.args['employee_id']))
             rows = db().execute(query + ' ORDER BY e.name,e.id LIMIT 5000', params).fetchall()
             full = module == 'personnel' and 'module' not in request.args and operation in (None,'read')
             return jsonify([_current(db(), row['id']) if full else dict(row) for row in rows])
@@ -821,7 +839,10 @@ def register(app, db, authenticated, audit, error):
             if changed_assignment or current['version'] == 0:
                 _history(db(), eid, current, values, effective, 'assignment_change')
             audit('hrm_update_person', values['company_id'], str(eid))
-        return jsonify(_current(db(), eid))
+        saved = _current(db(), eid)
+        if not ctx(db())['permissions']['personnel']['read']:
+            return jsonify(id=eid, version=saved['version'])
+        return jsonify(saved)
 
     @app.get('/api/hrm/contracts/expiring', endpoint='hrm_people_expiring_contracts')
     @authenticated
@@ -852,6 +873,12 @@ def register(app, db, authenticated, audit, error):
             if cid:
                 query += ' AND r.company_id=?'
                 params.append(cid)
+            if request.args.get('employee_id') not in (None, ''):
+                query += ' AND r.employee_id=?'
+                params.append(positive_id(request.args['employee_id']))
+            if request.args.get('site_id') not in (None, ''):
+                query += ' AND r.site_id=?'
+                params.append(positive_id(request.args['site_id']))
             rows = db().execute(query + ' ORDER BY r.id DESC LIMIT 5000', params).fetchall()
         result = []
         for row in rows:
@@ -1157,32 +1184,67 @@ def register(app, db, authenticated, audit, error):
         return Response(row['content'], mimetype='application/octet-stream', headers={
             'Content-Disposition': 'attachment; filename="personnel-document-' + str(rid) + suffix + '"'})
 
-    def training_person(eid):
+    def training_person(eid, operation='read', authorized_history=False):
+        require(db(), 'training', operation=operation)
         try:
-            return employee(db(), positive_id(eid), 'training')
+            return employee(db(), positive_id(eid), 'training', operation=operation)
         except PermissionError:
-            return employee(db(), positive_id(eid), 'personnel')
+            if not authorized_history:
+                raise
+            identity = db().execute('SELECT id,code,name FROM employees WHERE id=?', (positive_id(eid),)).fetchone()
+            if identity is None:
+                raise PermissionError()
+            return dict(identity, history_only=True)
+
+    def visible_training_facts(rows, operation='read'):
+        result = []
+        for item in rows:
+            row = dict(item)
+            row['company_id'] = row.pop('context_company_id', None) or row['company_id']
+            # Unknown historical sites stay unknown. Current assignment must
+            # never grant a site-limited reader access to an old fact.
+            row['site_id'] = row.get('site_id')
+            row['department'] = row.get('department') or ''
+            try:
+                access.record_scope(db(), row, 'training', operation=operation)
+            except PermissionError:
+                continue
+            result.append(row)
+        return result
 
     @app.get('/api/hrm/people/<int:eid>/training', endpoint='hrm_people_training')
     @authenticated
     def personnel_training(eid):
-        person = training_person(eid)
-        records = [dict(row) for row in db().execute('''SELECT r.*,c.title,c.date,c.status,c.company_id training_company_id
-            FROM records r JOIN courses c ON c.id=r.course_id WHERE r.employee_id=? ORDER BY c.date DESC,r.id DESC''', (eid,))]
-        assessments = [dict(row) for row in db().execute('''SELECT a.*,s.title skill_title,s.code skill_code
-            FROM assessments a JOIN skills s ON s.id=a.skill_id WHERE a.employee_id=? ORDER BY s.title''', (eid,))]
-        certificates = [dict(row) for row in db().execute('''SELECT id,title,issuer,issued,expires,filename
-            FROM certificates WHERE employee_id=? ORDER BY id DESC''', (eid,))]
-        return jsonify(employee=person, records=records, assessments=assessments, certificates=certificates)
+        require(db(), 'training')
+        eid = positive_id(eid)
+        records = visible_training_facts(db().execute('''SELECT r.*,c.title,c.date,c.status,c.company_id training_company_id,
+            x.company_id context_company_id,x.site_id,x.department,x.date_iso
+            FROM hrm_live_records r JOIN courses c ON c.id=r.course_id
+            LEFT JOIN hrm_training_record_context x ON x.record_id=r.id
+            WHERE r.employee_id=? ORDER BY c.date DESC,r.id DESC''', (eid,)))
+        assessments = visible_training_facts(db().execute('''SELECT a.*,s.title skill_title,s.code skill_code,
+            x.company_id context_company_id,x.site_id,x.department,x.date_iso
+            FROM hrm_live_assessments a JOIN skills s ON s.id=a.skill_id
+            LEFT JOIN hrm_training_assessment_context x ON x.assessment_id=a.id
+            WHERE a.employee_id=? ORDER BY s.title''', (eid,)))
+        from .hrm_training import list_rows
+        assessment_history = list_rows(db(), 'training_assessment_history', apply_filters=False, employee_id=eid)
+        certificates = training_certificate_rows(db(), eid)
+        person = training_person(eid, authorized_history=bool(records or assessments or assessment_history or certificates))
+        return jsonify(employee=person, records=records, assessments=assessments,
+                       assessment_history=assessment_history, certificates=certificates)
 
     @app.get('/api/hrm/people/<int:eid>/training-certificates/<int:rid>/file', endpoint='hrm_people_training_certificate')
     @authenticated
     def personnel_training_certificate(eid, rid):
-        person = training_person(eid)
+        require(db(), 'training', operation='export')
+        eid = positive_id(eid)
         row = db().execute('SELECT * FROM certificates WHERE id=? AND employee_id=?', (positive_id(rid), eid)).fetchone()
         if row is None:
             return error('گواهینامه یافت نشد', 404)
-        audit('hrm_download_training_certificate', person['company_id'], str(rid))
+        access.record_scope(db(), dict(company_id=row['company_id'], site_id=None, department=''),
+                            'training', operation='export')
+        audit('hrm_download_training_certificate', row['company_id'], str(rid))
         db().commit()
         extension = { 'application/pdf': '.pdf', 'image/png': '.png', 'image/jpeg': '.jpg' }.get(row['mime'], '.bin')
         return Response(row['content'], mimetype='application/octet-stream', headers={

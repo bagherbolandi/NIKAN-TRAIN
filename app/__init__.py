@@ -182,7 +182,10 @@ def create_app(data_dir=None,testing=False):
   for field,target in references.items():
    if field in d:
     d[field]=positive_id(d[field])
-    if not db().execute(f'SELECT 1 FROM {target} WHERE id=? AND company_id=?',(d[field],cid)).fetchone():raise ValueError('رکورد مرتبط متعلق به این شرکت نیست')
+    if target=='employees':
+     found=db().execute('SELECT 1 FROM employees e LEFT JOIN hrm_employee_details h ON h.employee_id=e.id WHERE e.id=? AND COALESCE(h.company_id,e.company_id)=?',(d[field],cid)).fetchone()
+    else:found=db().execute(f'SELECT 1 FROM {target} WHERE id=? AND company_id=?',(d[field],cid)).fetchone()
+    if not found:raise ValueError('رکورد مرتبط متعلق به این شرکت نیست')
  @app.route('/api/data/<table>',methods=['GET','POST'])
  @authenticated
  def data(table):
@@ -193,6 +196,9 @@ def create_app(data_dir=None,testing=False):
    return jsonify(rows(db(),cid))
   if table=='skills' and g.user['role']!='admin':raise PermissionError()
   if request.method=='GET':
+   if table=='employees':
+    from .personnel_identity import current_employee_rows
+    return jsonify(current_employee_rows(db(),cid))
    source='hrm_live_'+table if table in ('assessments','records') else table
    return jsonify([dict(r) for r in db().execute(f'SELECT * FROM {source} WHERE company_id=? ORDER BY id DESC',(cid,))])
   if g.user['role']=='viewer':raise PermissionError()
@@ -202,6 +208,10 @@ def create_app(data_dir=None,testing=False):
    d.setdefault('calendar_scope','internal')
   if any(d.get(k) in (None,'') for k in REQUIRED[table]):return error('فیلدهای الزامی را تکمیل کنید')
   validate_refs(table,d,cid)
+  if table=='employees':
+   from .personnel_identity import write_legacy_employee
+   rid,_=write_legacy_employee(db(),cid,d,policy='create')
+   audit('create_employees',cid,str(rid));db().commit();return jsonify(id=rid),201
   if table=='skills':
    bank=db().execute('SELECT title FROM holding_competencies WHERE code=?',(d['code'],)).fetchone()
    if bank and bank['title'].strip()!=str(d['title']).strip():raise ValueError('این کد در بانک مشترک وجود دارد؛ عنوان آن را از بانک هلدینگ ویرایش کنید')
@@ -220,6 +230,20 @@ def create_app(data_dir=None,testing=False):
   if table=='skills':return error('شایستگی مشترک را از بانک هلدینگ ویرایش کنید',400)
   if g.user['role']=='viewer':raise PermissionError()
   rid=positive_id(rid)
+  if table=='employees':
+   from .personnel_identity import write_legacy_employee
+   target=db().execute('SELECT e.id FROM employees e LEFT JOIN hrm_employee_details h ON h.employee_id=e.id WHERE e.id=? AND COALESCE(h.company_id,e.company_id)=?',(rid,cid)).fetchone()
+   if not target:return error('رکورد یافت نشد',404)
+   if request.method=='DELETE':
+    if db().execute('SELECT 1 FROM hrm_employee_details WHERE employee_id=?',(rid,)).fetchone():
+     return error('پرونده مرکزی دارای انتساب و تاریخچه حذف نمی‌شود؛ وضعیت همکاری را در پرونده پرسنلی ثبت کنید',409)
+    db().execute('DELETE FROM employees WHERE id=?',(rid,))
+   else:
+    body=json_object();d={k:v for k,v in body.items() if k in FIELDS[table]}
+    if not d:raise ValueError('تغییری ارسال نشده')
+    validate_refs(table,d,cid)
+    write_legacy_employee(db(),cid,d,employee_id=rid,version=body.get('version'))
+   audit(request.method+'_employees',cid,str(rid));db().commit();return jsonify(ok=True)
   if table=='courses':db().execute('BEGIN IMMEDIATE')
   target=db().execute(f'SELECT * FROM {table} WHERE id=? AND company_id=?',(rid,cid)).fetchone()
   if not target:return error('رکورد یافت نشد',404)
@@ -227,7 +251,7 @@ def create_app(data_dir=None,testing=False):
    context_table='hrm_training_'+('assessment' if table=='assessments' else 'record')+'_context'
    key='assessment_id' if table=='assessments' else 'record_id'
    historical=db().execute(f'SELECT is_deleted FROM {context_table} WHERE {key}=?',(rid,)).fetchone()
-   if historical and (historical['is_deleted'] or request.method=='DELETE'):
+   if historical:
     return error('برای اصلاح، ابطال یا بازیابی این سابقه از بخش مدیریت آموزش HRM استفاده کنید تا تاریخچه حفظ شود',409)
   if table=='needs' and target['status']!='submitted':
    return error('نیاز بررسی‌شده قفل است؛ ابتدا هلدینگ آن را برای اصلاح بازگشایی کند',409)
@@ -247,8 +271,21 @@ def create_app(data_dir=None,testing=False):
    db().execute(f"UPDATE {table} SET {','.join(k+'=?' for k in d)} WHERE id=? AND company_id=?",list(d.values())+[rid,cid])
   audit(request.method+'_'+table,cid,str(rid));db().commit();return jsonify(ok=True)
  def gaps(cid):
-  rows=db().execute('''SELECT e.id employee_id,e.code,e.name,e.department,e.job,s.id skill_id,b.title,b.importance,COALESCE(p.level,r.level,0) required,COALESCE(a.level,(SELECT MAX(t.level) FROM hrm_live_records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=e.id AND c.skill_id=s.id AND c.status='completed' AND t.company_id=e.company_id),0) current FROM employees e JOIN skills s ON s.company_id=e.company_id LEFT JOIN requirements r ON r.company_id=e.company_id AND r.job=e.job AND r.skill_id=s.id LEFT JOIN personal_requirements p ON p.employee_id=e.id AND p.skill_id=s.id JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN hrm_live_assessments a ON a.employee_id=e.id AND a.skill_id=s.id AND a.company_id=e.company_id WHERE e.company_id=?''',(cid,)).fetchall()
-  return [dict(r,gap=r['required']-r['current']) for r in rows if r['required']>r['current']]
+  # The matrix owns level precedence and distinguishes unknown from zero.
+  from .hrm_matrix import matrix_report
+  report=matrix_report(db(),{'company_id':cid})
+  skill_ids={r['code']:r['id'] for r in db().execute('SELECT s.id,l.code FROM skills s JOIN competency_links l ON l.skill_id=s.id WHERE s.company_id=?',(cid,))}
+  result=[]
+  for row in report['rows']:
+   required=[value for value in (row.get('required_level'),row.get('job_required_level')) if value is not None and value>0]
+   known=[value for value in (row.get('gap'),row.get('job_gap')) if value is not None]
+   unknown=bool(required) and row.get('current_level') is None
+   gap=max(known) if known else None
+   if not unknown and (gap is None or gap<=0):continue
+   result.append(dict(row,skill_id=skill_ids.get(row['competency_code']),code=row['employee_code'],name=row['employee_name'],title=row['competency_title'],
+                      required=max(required) if required else None,current=row.get('current_level'),gap=gap,
+                      requires_assessment=unknown,gap_basis='job_ideal_and_personal_requirement'))
+  return result
  @app.get('/api/gaps')
  @authenticated
  def gap_api():return jsonify(gaps(company()))
@@ -257,7 +294,10 @@ def create_app(data_dir=None,testing=False):
  def dashboard():
   cid=company();counts={t:db().execute(f'SELECT count(*) FROM {t} WHERE company_id=?',(cid,)).fetchone()[0] for t in ['employees','skills','courses','records']}
   counts['gaps']=len(gaps(cid));counts['budget']=db().execute('SELECT COALESCE(SUM(cost),0) FROM courses WHERE company_id=? AND status!=?',(cid,'cancelled')).fetchone()[0]
-  counts['companies']=[dict(r) for r in db().execute('SELECT c.id,c.name,(SELECT count(*) FROM employees e WHERE e.company_id=c.id) employees FROM companies c WHERE c.id=? OR ?=1',(cid,int(g.user['role']=='admin')))];return jsonify(counts)
+  from .personnel_identity import current_employee_rows
+  counts['employees']=len(current_employee_rows(db(),cid))
+  counts['unknown_competencies']=sum(row['requires_assessment'] for row in gaps(cid))
+  counts['companies']=[dict(r,employees=len(current_employee_rows(db(),r['id']))) for r in db().execute('SELECT id,name FROM companies WHERE id=? OR ?=1',(cid,int(g.user['role']=='admin')))];return jsonify(counts)
  @app.get('/api/audit')
  @authenticated
  def logs():
@@ -350,8 +390,14 @@ def create_app(data_dir=None,testing=False):
  WHERE COALESCE(x.is_deleted,0)=0;COMMIT;''')
  from .hrm_productivity import register as register_hrm_productivity
  register_hrm_productivity(app,db,authenticated,audit,error)
+ from .hrm_matrix import register as register_hrm_matrix
+ register_hrm_matrix(app,db,authenticated,audit,error)
+ from .hrm_integration import register as register_hrm_integration
+ register_hrm_integration(app,db,authenticated,audit,error)
  from .hrm_core import register as register_hrm_core
  register_hrm_core(app,db,authenticated,audit,error)
+ from .hrm_excel import register as register_hrm_excel
+ register_hrm_excel(app,db,authenticated,audit,error)
  from .hrm_migrations import complete as complete_hrm_migration
  with app.app_context():complete_hrm_migration(db())
  return app

@@ -40,7 +40,7 @@ def stage(cache,payload,network=False,test=False):
   for name in ['install_server.ps1','stop_server.ps1','start_server.ps1','restore_server.ps1']:shutil.copy2(ROOT/'packaging'/name,payload/name)
  shutil.copy2(ROOT/'packaging'/'nikan.ico',payload/'nikan.ico')
  (payload/'resources').mkdir();shutil.copy2(next(ROOT.glob('*.xlsx')),payload/'resources'/'workbook.xlsx')
- manifest={'product':'Nikan HRM','version':'0.13.0','mode':'server' if network else 'test' if test else 'desktop','python':{'url':PYTHON_URL,'sha512_base64':PYTHON_SHA512},'wheels':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(wheels.glob('*.whl'))},'files':{str(p.relative_to(payload)):hashlib.sha256(p.read_bytes()).hexdigest() for p in payload.rglob('*') if p.is_file()}}
+ manifest={'product':'Nikan HRM','version':'0.14.0','mode':'server' if network else 'test' if test else 'desktop','python':{'url':PYTHON_URL,'sha512_base64':PYTHON_SHA512},'wheels':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(wheels.glob('*.whl'))},'files':{str(p.relative_to(payload)):hashlib.sha256(p.read_bytes()).hexdigest() for p in payload.rglob('*') if p.is_file()}}
  (payload/'build-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
  return manifest
 if __name__=='__main__':

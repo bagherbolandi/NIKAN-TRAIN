@@ -47,10 +47,12 @@ def register(app, db, authenticated, company, audit, error, gaps):
         for co in db().execute('SELECT * FROM companies').fetchall():
             codes = {r['id']:r['code'] for r in db().execute('SELECT id,code FROM skills WHERE company_id=?',(co['id'],))}
             for gap in gaps(co['id']):
-                code = codes[gap['skill_id']]
-                row = result.setdefault(code, dict(code=code,title=gap['title'],importance=gap['importance'],people=0,gap_total=0,companies={}))
+                code = gap.get('competency_code') or codes[gap['skill_id']]
+                row = result.setdefault(code, dict(code=code,title=gap['title'],importance=gap['importance'],people=0,gap_total=0,unknown_count=0,companies={}))
                 row['people'] += 1
-                row['gap_total'] += gap['gap']
+                if gap['gap'] is None:row['unknown_count'] += 1
+                else:row['gap_total'] += gap['gap']
+                row['gap_total_is_partial'] = bool(row['unknown_count'])
                 row['companies'][co['name']] = row['companies'].get(co['name'],0)+1
         return jsonify(sorted(result.values(),key=lambda r:(-r['importance'],-r['gap_total'],r['code'])))
 

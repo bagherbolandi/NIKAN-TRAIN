@@ -6,7 +6,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 
-VERSION = 'hrm-0.13'
+VERSION = 'hrm-0.14'
 
 
 def prepare_upgrade_backup(root):
@@ -26,7 +26,7 @@ def prepare_upgrade_backup(root):
         folder = root / 'pre-upgrade-backups'
         folder.mkdir(exist_ok=True, mode=0o700)
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-        target = folder / ('pre-hrm-0.13-' + stamp + '-' + secrets.token_hex(4) + '.sqlite3')
+        target = folder / ('pre-hrm-0.14-' + stamp + '-' + secrets.token_hex(4) + '.sqlite3')
         destination = sqlite3.connect(target)
         try:
             source.backup(destination, pages=256, sleep=.05)
@@ -74,5 +74,5 @@ def prepare_upgrade_backup(root):
 
 
 def complete(conn):
-    conn.executemany('INSERT OR IGNORE INTO hrm_schema_migrations(version) VALUES (?)', [('hrm-0.12',), (VERSION,)])
+    conn.executemany('INSERT OR IGNORE INTO hrm_schema_migrations(version) VALUES (?)', [('hrm-0.12',), ('hrm-0.13',), (VERSION,)])
     conn.commit()

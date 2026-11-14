@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "version": "0.14.0",
+  "baseline_versions": [
+    "0.10",
+    "0.11.2",
+    "0.12.1",
+    "0.13.0"
+  ],
+  "upgrade_junit": "pytest-0.14-upgrade.xml",
+  "checks": [
+    "original scalar columns and BLOBs preserved",
+    "historical document owners and full passports preserved",
+    "original migration timestamps retained",
+    "verified pre-upgrade snapshot",
+    "encrypted legacy recovery authenticated",
+    "finalized accord evidence preserved"
+  ],
+  "test_runs": [
+    {
+      "file": "pytest-0.14-final.xml",
+      "tests": 529,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 528
+    },
+    {
+      "file": "pytest-0.14-upgrade.xml",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 4
+    }
+  ],
+  "extracted_payloads": [
+    {
+      "kind": "test",
+      "passed": true
+    },
+    {
+      "kind": "server",
+      "passed": true
+    },
+    {
+      "kind": "https",
+      "passed": true
+    }
+  ]
+}

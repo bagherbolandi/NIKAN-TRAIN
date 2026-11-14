@@ -39,21 +39,26 @@ def import_workbook(db,file,cid,personnel=False,allow_new=True,skip_missing=Fals
     values=[str(row[i] or '') for i in [1,2,6,7,9,10,11,12,13,14,15,16,18]]
     c=db.execute('INSERT OR IGNORE INTO job_profiles(company_id,job,department,purpose,supervisor,duties,authority,education,experience,legal,hse,equipment,revision,approved_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[cid]+values);result['job_profiles']+=c.rowcount
   if personnel:
+   from .personnel_identity import find_current_employee,write_legacy_employee
    s=w['ماتریس_مهارت'];codes=next(s.iter_rows(min_row=4,max_row=4,values_only=True))
    for row in s.iter_rows(min_row=6,values_only=True):
     if not row[1] or not row[2]:continue
-    c=db.execute('INSERT OR IGNORE INTO employees(company_id,code,name,department,job) VALUES (?,?,?,?,?)',(cid,str(row[1]),str(row[2]),str(row[4] or ''),str(row[3] or '')));result['employees']+=c.rowcount
-    eid=db.execute('SELECT id FROM employees WHERE company_id=? AND code=?',(cid,str(row[1]))).fetchone()[0]
+    eid=find_current_employee(db,cid,str(row[1]))
+    if eid is None:
+     eid,outcome=write_legacy_employee(db,cid,dict(code=str(row[1]),name=str(row[2]),department=str(row[4] or ''),job=str(row[3] or '')),policy='create')
+     result['employees']+=int(outcome=='created')
     for i,v in enumerate(row[12:],12):
      level=LEVELS.get(str(v).strip());sid=skills.get(str(codes[i]))
      if level and sid:
+      if db.execute('SELECT 1 FROM assessments a JOIN hrm_training_assessment_context x ON x.assessment_id=a.id WHERE a.company_id=? AND a.employee_id=? AND a.skill_id=?',(cid,eid,sid)).fetchone():
+       raise ValueError('ارزیابی نسخه‌دار از فایل قدیمی تغییر نمی‌کند؛ از مدیریت آموزش یا قالب یکپارچه ارزیابی استفاده کنید')
       c=db.execute('INSERT OR IGNORE INTO assessments(company_id,employee_id,skill_id,level) VALUES (?,?,?,?)',(cid,eid,sid,level));result['assessments']+=c.rowcount
   if personnel and 'پرونده_پرسنلی' in w.sheetnames:
    for row in w['پرونده_پرسنلی'].iter_rows(min_row=6,values_only=True):
     if not row[1]:continue
-    e=db.execute('SELECT id FROM employees WHERE company_id=? AND code=?',(cid,str(row[1]))).fetchone()
-    if not e:continue
-    c=db.execute('INSERT OR IGNORE INTO employee_meta(employee_id,company_id,source_job,mapping,assessment_status,assessor,assessment_date,evidence,hr_approved) VALUES (?,?,?,?,?,?,?,?,?)',(e[0],cid,str(row[4] or ''),str(row[6] or ''),str(row[13] or ''),str(row[15] or ''),str(row[16] or ''),str(row[17] or ''),int(bool(row[10]))));result['employee_metadata']+=c.rowcount
+    eid=find_current_employee(db,cid,str(row[1]))
+    if eid is None:continue
+    c=db.execute('INSERT OR IGNORE INTO employee_meta(employee_id,company_id,source_job,mapping,assessment_status,assessor,assessment_date,evidence,hr_approved) VALUES (?,?,?,?,?,?,?,?,?)',(eid,cid,str(row[4] or ''),str(row[6] or ''),str(row[13] or ''),str(row[15] or ''),str(row[16] or ''),str(row[17] or ''),int(bool(row[10]))));result['employee_metadata']+=c.rowcount
   db.execute('RELEASE excel_import')
  except Exception:
   db.execute('ROLLBACK TO excel_import');db.execute('RELEASE excel_import');raise

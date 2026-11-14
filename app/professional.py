@@ -62,14 +62,24 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   cid=company();eid=positive_id(eid);e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
   if not e:return error('فرد یافت نشد',404)
   job=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,e['job'])).fetchone();meta=db().execute('SELECT * FROM employee_meta WHERE employee_id=? AND company_id=?',(eid,cid)).fetchone()
-  matrix=db().execute('''SELECT s.id,b.code,b.title,b.category,COALESCE(p.level,r.level,0) required,COALESCE(a.level,(SELECT MAX(t.level) FROM hrm_live_records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=? AND c.skill_id=s.id AND c.status='completed'),0) current FROM skills s JOIN competency_links l ON l.skill_id=s.id JOIN holding_competencies b ON b.code=l.code LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=s.company_id AND r.job=? LEFT JOIN personal_requirements p ON p.skill_id=s.id AND p.employee_id=? LEFT JOIN hrm_live_assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=s.company_id WHERE s.company_id=? AND (r.id IS NOT NULL OR a.id IS NOT NULL OR p.employee_id IS NOT NULL) ORDER BY b.category,b.code''',(eid,cid,e['job'],eid,eid,cid)).fetchall()
+  from .hrm_matrix import person_matrix_rows
+  from . import hrm_access
+  current_assignment=None
+  try:
+   current=hrm_access.employee(db(),eid,'training')
+   current_assignment={key:current.get(key) for key in ('id','code','name','company_id','site_id','department','job')}
+   matrix=person_matrix_rows(db(),eid)
+  except PermissionError:
+   # The historical document remains readable to its owner; the former
+   # employer receives no current-employer assignment or matrix metadata.
+   matrix=[]
   records=db().execute('SELECT t.*,c.title,c.date,c.status FROM hrm_live_records t JOIN courses c ON c.id=t.course_id WHERE t.employee_id=? AND t.company_id=?',(eid,cid)).fetchall()
   certs=db().execute('SELECT id,title,issuer,issued,expires,filename FROM certificates WHERE employee_id=? AND company_id=?',(eid,cid)).fetchall()
-  related=[r['id'] for r in matrix if r['required']>r['current']]
-  plans=[dict(r) for r in db().execute("SELECT * FROM courses WHERE company_id=? AND status IN ('planned','approved')",(cid,)) if r['skill_id'] in related]
+  related=[r['id'] for r in matrix if r['required'] is not None and r['required']>0 and (r['current'] is None or r['gap']>0)]
+  plans=[dict(r) for r in db().execute("SELECT * FROM courses WHERE company_id=? AND status IN ('planned','approved')",(current_assignment['company_id'] if current_assignment else cid,)) if r['skill_id'] in related]
   from .documents import document_view
   document=document_view(db(),cid,eid,dict(job) if job else None)
-  return jsonify(document=document,employee=dict(e),job=document['effective'],meta=dict(meta) if meta else None,matrix=[dict(r,gap=max(0,r['required']-r['current'])) for r in matrix],records=[dict(r) for r in records],certificates=[dict(r) for r in certs],idp=plans)
+  return jsonify(document=document,employee=dict(e),job=document['effective'],meta=dict(meta) if meta else None,matrix=matrix,current_assignment=current_assignment,matrix_basis='current_assignment_authorized_evidence',records=[dict(r) for r in records],certificates=[dict(r) for r in certs],idp=plans)
  @app.put('/api/passports/<int:eid>/approval')
  @authenticated
  def approval(eid):
@@ -80,7 +90,11 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
   if not isinstance(job,str) or not job.strip():raise ValueError('سمت فرد را انتخاب کنید')
   job=job.strip()
   if not db().execute('SELECT 1 FROM job_profiles WHERE company_id=? AND job=?',(cid,job)).fetchone():raise ValueError('ابتدا شناسنامه این سمت را تعریف کنید')
-  db().execute('UPDATE employees SET job=? WHERE id=? AND company_id=?',(job,eid,cid))
+  previous=db().execute('SELECT company_id FROM employee_meta WHERE employee_id=?',(eid,)).fetchone()
+  if previous and previous['company_id']!=cid:
+   return error('تأیید شناسنامه قبلی متعلق به شرکت دیگری است؛ انتساب فعلی را در پرونده مرکزی اصلاح کنید',409)
+  from .personnel_identity import write_legacy_employee
+  write_legacy_employee(db(),cid,{'job':job},employee_id=eid)
   db().execute('INSERT INTO employee_meta(employee_id,company_id,hr_approved) VALUES (?,?,1) ON CONFLICT(employee_id) DO UPDATE SET hr_approved=1',(eid,cid));audit('hr_job_approved',cid,str(eid));db().commit();return jsonify(ok=True)
  @app.route('/api/certificates',methods=['GET','POST'])
  @authenticated
@@ -110,8 +124,16 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.get('/api/management-report')
  @authenticated
  def report():
-  cid=company();gs=gaps(cid);departments={}
+  from .personnel_identity import current_employee_rows
+  cid=company();gs=gaps(cid);departments={};staff=current_employee_rows(db(),cid)
   for r in gs:
-   v=departments.setdefault(r['department'] or 'بدون واحد',{'gaps':0,'employees':set(),'critical':0});v['gaps']+=1;v['employees'].add(r['employee_id']);v['critical']+=int(r['importance']==3)
-  rows=[dict(department=k,gaps=v['gaps'],employees=len(v['employees']),critical=v['critical']) for k,v in departments.items()]
-  return jsonify(departments=sorted(rows,key=lambda r:-r['gaps']),unmapped=db().execute("SELECT COUNT(*) FROM employees WHERE company_id=? AND job=''",(cid,)).fetchone()[0],unapproved=db().execute('SELECT COUNT(*) FROM employees e LEFT JOIN employee_meta m ON m.employee_id=e.id WHERE e.company_id=? AND COALESCE(m.hr_approved,0)=0',(cid,)).fetchone()[0],certificate_count=db().execute('SELECT COUNT(*) FROM certificates WHERE company_id=?',(cid,)).fetchone()[0])
+   v=departments.setdefault(r['department'] or 'بدون واحد',{'gaps':0,'unknown':0,'employees':set(),'critical':0})
+   v['employees'].add(r['employee_id'])
+   if r['gap'] is None:v['unknown']+=1
+   else:v['gaps']+=1;v['critical']+=int(r['importance']==3)
+  rows=[dict(department=k,gaps=v['gaps'],unknown=v['unknown'],employees=len(v['employees']),critical=v['critical']) for k,v in departments.items()]
+  approvals={r['employee_id']:dict(r) for r in db().execute('SELECT m.*,e.job original_job FROM employee_meta m JOIN employees e ON e.id=m.employee_id WHERE m.company_id=?',(cid,))}
+  unapproved=sum(not (approvals.get(p['id'],{}).get('hr_approved') and approvals[p['id']]['original_job']==p['job']) for p in staff)
+  return jsonify(departments=sorted(rows,key=lambda r:-(r['gaps']+r['unknown'])),unmapped=sum(not p['job'] for p in staff),unapproved=unapproved,
+                 employee_count=len(staff),staffing_basis='current_assignment',approval_basis='historical_approval_requires_matching_current_job',
+                 certificate_count=db().execute('SELECT COUNT(*) FROM certificates WHERE company_id=?',(cid,)).fetchone()[0],certificate_basis='historical_issuer_company')

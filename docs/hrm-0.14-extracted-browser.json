@@ -1,0 +1,55 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "installer_version": "0.14.0",
+  "installer": "NikanHRM-Test-Setup.exe",
+  "launcher": "desktop_test.py",
+  "server_interpreter": "/workspace/nikan-build-tools/standalone-venv/bin/python",
+  "module_paths": {
+    "app": "/workspace/nikan-build-tools/extracted-hrm-test/app/__init__.py",
+    "app.hrm_excel": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_excel.py",
+    "app.hrm_matrix": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_matrix.py",
+    "app.hrm_integration": "/workspace/nikan-build-tools/extracted-hrm-test/app/hrm_integration.py"
+  },
+  "production_runtime_has_pytest": false,
+  "production_runtime_has_playwright": false,
+  "person_workspace": {
+    "passed": true,
+    "checks": [
+      "one directory/dossier entry and person-filtered contracts",
+      "existing contract form pins employee identity and reloads same dossier",
+      "section changes discard stale editor preparation without changing pinned identity",
+      "canonical per-person matrix distinguishes explicit zero and unknown audit fields",
+      "matrix Excel export uses same scoped source",
+      "training certificate metadata and protected file download reuse existing attachment bytes",
+      "legacy employee/user/record/assessment navigation resolves canonical workspaces",
+      "non-personnel domain reader gets minimal dossier without clinical tabs/data",
+      "historical-only dossier keeps company context and disables writes without leaking current site"
+    ],
+    "javascript_errors": [],
+    "native_windows_execution": false
+  },
+  "excel_hub": {
+    "passed": true,
+    "platform": "linux",
+    "native_windows_execution": false,
+    "checks": [
+      "single central Excel navigation and duplicate legacy input forms hidden",
+      "download actual scoped blank template",
+      "populate leading-zero personnel code",
+      "preview leaves canonical personnel database empty",
+      "commit creates central person through canonical API",
+      "prefilled correction includes canonical id/current version",
+      "explicit update preview does not change record",
+      "commit changes only intended phone",
+      "late invalid row displays exact Excel row and disables commit without partial writes",
+      "mobile viewport contains page without horizontal overflow"
+    ],
+    "javascript_errors": []
+  },
+  "limitations": [
+    "Linux execution of actual extracted application payload with production dependencies; Windows executable/NSIS GUI execution remains unconfirmed."
+  ],
+  "test_profile_isolation_label_visible": true
+}

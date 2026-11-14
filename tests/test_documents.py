@@ -36,7 +36,11 @@ def test_personal_requirements_and_ordered_excel(ready):
  p=f'/api/passports/{ids[0]}/requirements?company_id=1'
  assert c.put(p,headers=h,json={'items':[{'code':'S001','level':0},{'code':'S002','level':1}]}).status_code==200
  gaps=c.get('/api/gaps?company_id=1').json
- assert len([r for r in gaps if r['employee_id']==ids[0]])==1
+ assert len([r for r in gaps if r['employee_id']==ids[0]])==2
+ # A reduced personal obligation must not hide the ideal job requirement.
+ ideal=next(r for r in gaps if r['employee_id']==ids[0] and r['competency_code']=='S001')
+ assert ideal['job_required_level']==3 and ideal['personal_required_level']==0
+ assert ideal['current'] is None and ideal['requires_assessment']
  assert len([r for r in gaps if r['employee_id']==ids[1]])==2
  assert next(r for r in c.get(f'/api/passports/{ids[0]}?company_id=1').json['matrix'] if r['code']=='S002')['required']==1
  assert c.put(p,headers=h,json={'items':[{'code':'S002','level':4},{'code':'MISSING','level':1}]}).status_code==400

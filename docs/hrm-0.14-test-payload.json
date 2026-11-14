@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "installation": "/workspace/nikan-build-tools/extracted-hrm-test",
+  "platform": "linux",
+  "python": "3.12.14",
+  "checks": [
+    "primary administrator has all five operations across all seven companies",
+    "central personnel identity, company/site assignment, contract, private file roundtrip and attendance",
+    "loan repayment balance and globally conflicting shared accommodation reservations",
+    "PPE, separately confidential medical records, no employee portal and five independent operation grants",
+    "site transfer keeps person/reference identity and does not reveal former-site contract, attachment or loan",
+    "legacy shared training, actual-headcount exact-rial cost allocation and full/annex Word runtime dependencies",
+    "admin site deletion preserves linked history, never reuses retired IDs and shows current site membership after transfer",
+    "canonical eight-item weighted accord, exact-rial participation, explicit financial grants, closed-period finalization and immutable result",
+    "single-person dossier links, canonical skill matrix, explicit zero versus unknown and dated assessor/recorder/evidence trace",
+    "unified branded Excel hub excludes duplicate training/personnel entry forms and rolls preview back without changing identity counters or financial results",
+    "raw backup/restart preserves one central identity, matrix zero and assessment trace, confidential BLOB, actual attendance/cost and exact finalized accord evidence"
+  ],
+  "synthetic_attachment_sha256": "b67bab0217986cd0cd061d5f3754552950598bd67a2011a1014b779e5fcb7631",
+  "native_windows_execution": false
+}

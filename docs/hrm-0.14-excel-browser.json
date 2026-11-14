@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "platform": "linux",
+  "native_windows_execution": false,
+  "checks": [
+    "single central Excel navigation and duplicate legacy input forms hidden",
+    "download actual scoped blank template",
+    "populate leading-zero personnel code",
+    "preview leaves canonical personnel database empty",
+    "commit creates central person through canonical API",
+    "prefilled correction includes canonical id/current version",
+    "explicit update preview does not change record",
+    "commit changes only intended phone",
+    "late invalid row displays exact Excel row and disables commit without partial writes",
+    "mobile viewport contains page without horizontal overflow"
+  ],
+  "javascript_errors": []
+}

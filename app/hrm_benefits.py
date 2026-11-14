@@ -405,7 +405,8 @@ def _query_rows(conn, resource, include_deleted=False):
                                        'partial' if row['paid_rials'] else 'unpaid')
         elif resource == 'reservations':
             row['nights'] = (date.fromisoformat(row['end_date']) - date.fromisoformat(row['start_date'])).days
-    return rows
+    from .hrm_common import exact_rial_fields
+    return [exact_rial_fields(row) for row in rows]
 
 
 def _archive(conn, resource, old):

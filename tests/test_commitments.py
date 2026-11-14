@@ -287,8 +287,12 @@ def test_actual_office_renderer_keeps_annex_on_one_a4_page(ready, tmp_path, case
         assert c.put(f'/api/passports/{eid}/document?company_id=1', headers=ready['headers'],
                      json={'overrides': values}).status_code == 200
         identity = {key: ('نام بسیار طولانی سازمان و سمت کارکنان ' * 30) for key in ('name', 'job', 'department')}
-        assert c.put(f'/api/data/employees/{eid}?company_id=1', headers=ready['headers'], json=identity).status_code == 200
+        # New canonical inputs are bounded; historical databases can still
+        # contain overlong identities and their annexes must render safely.
+        assert c.put(f'/api/data/employees/{eid}?company_id=1', headers=ready['headers'], json=identity).status_code == 400
         with sqlite3.connect(ready['app'].config['DB']) as connection:
+            connection.execute('UPDATE employees SET name=?,job=?,department=? WHERE id=?',
+                               (identity['name'],identity['job'],identity['department'],eid))
             connection.execute('UPDATE companies SET name=? WHERE id=1', ('نام کامل و طولانی شرکت وابسته به هلدینگ ' * 30,))
         if 'logo' in case:
             image = io.BytesIO()

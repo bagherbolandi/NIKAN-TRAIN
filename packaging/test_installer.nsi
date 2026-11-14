@@ -71,7 +71,7 @@ Section "Nikan HRM Test" SEC_MAIN
  CreateShortcut "$SMPROGRAMS\Nikan HRM Test\Close Nikan HRM Test.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\stop_hrm_test.py"' "$AppIcon"
  CreateShortcut "$DESKTOP\Nikan HRM Test.lnk" "$INSTDIR\runtime\pythonw.exe" '-I "$INSTDIR\desktop_test.py"' "$AppIcon"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "DisplayName" "Nikan HRM Test"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "DisplayVersion" "0.13.0"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "DisplayVersion" "0.14.0"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "Publisher" "Nikan Holding"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanHRM-Test" "InstallLocation" "$INSTDIR"

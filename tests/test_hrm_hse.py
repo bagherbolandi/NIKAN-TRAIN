@@ -152,8 +152,9 @@ def test_required_training_reuses_existing_evidence_without_raising_current_leve
     post(officer,headers,'hse_training_requirements?company_id=1',{'job':'Engineer','activity_location':'Line A','domain':'safety','competency_code':'S001','required_level':3,'renewal_days':15})
     before=changes(hse['app'].config['DB'])
     row=officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]
-    assert row['current_level']==0 and row['level_source']=='current_assessment' and row['gap']==3 and row['renewal_due']
-    assert row['last_training_date']=='2026-10-23'
+    assert row['current_level']==0 and row['level_source']=='current_assessment' and row['gap']==3
+    assert row['renewal_due'] is None and row['renewal_review_required'] and row['training_due']
+    assert row['last_training_date']=='' and row['actual_completion_status']=='unknown'
     # Newer actual attendance updates renewal evidence; it is not a skill assessment.
     next_course=admin.post('/api/data/courses?company_id=1',headers=ah,json={'skill_id':sid,'title':'Recently attended','date':'1405/08/20','hours':1,'status':'completed'}).json['id']
     assert admin.put(f'/api/courses/{next_course}/participants',headers=ah,json={'employee_ids':[eid]}).status_code==200
@@ -394,11 +395,11 @@ def test_voided_current_training_assessment_is_hidden_in_hse_and_legacy_editors(
     assert officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]['current_level']==4
     result=admin.delete('/api/hrm/training_assessments/'+str(assessment['id']),headers=ah,json={'version':assessment['version']})
     assert result.status_code==200,result.json
-    assert officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]['current_level']==0
+    assert officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]['current_level'] is None
     passport=admin.get(f'/api/passports/{eid}?company_id=1').json
-    assert next(r for r in passport['matrix'] if r['code']=='S001')['current']==0
+    assert next(r for r in passport['matrix'] if r['code']=='S001')['current'] is None
     workspace=admin.get(f'/api/assessment-workspace/{eid}?company_id=1').json
-    assert next(r for r in workspace['matrix'] if r['code']=='S001')['current']==0
+    assert next(r for r in workspace['matrix'] if r['code']=='S001')['current'] is None
     with sqlite3.connect(hse['app'].config['DB']) as conn:
         assert conn.execute('SELECT level FROM assessments WHERE id=?',(assessment['id'],)).fetchone()[0]==4
         tables=['assessments','skills','competency_links','audit','hrm_training_assessment_context']
@@ -420,11 +421,13 @@ def test_voided_course_grade_is_not_reused_as_hse_skill_or_legacy_training_histo
     officer,oh=hse['actors']['hse-officer']
     post(officer,oh,'hse_training_requirements?company_id=1',{'job':'Engineer','activity_location':'Line A','domain':'safety','competency_code':'S001','required_level':3,'renewal_days':90})
     current=officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]
-    assert current['current_level']==4 and current['level_source']=='completed_course' and not current['renewal_due']
+    assert current['current_level']==4 and current['level_source']=='completed_course_record'
+    assert current['renewal_due'] is None and current['last_training_date']=='' and current['renewal_review_required']
     result=admin.delete('/api/hrm/training_records/'+str(record['id']),headers=ah,json={'version':record['version']})
     assert result.status_code==200,result.json
     current=officer.get('/api/hrm/hse_report?company_id=1').json['training'][0]
-    assert current['current_level']==0 and current['last_training_date']=='' and current['renewal_due']
+    assert current['current_level'] is None and current['last_training_date']=='' and current['renewal_due'] is None
+    assert current['evidence_review_required'] and current['training_due']
     passport=admin.get(f'/api/passports/{eid}?company_id=1').json
     assert passport['records']==[]
     assert admin.get('/api/data/records?company_id=1').json==[]
@@ -445,12 +448,16 @@ def test_transferred_worker_uses_current_company_assessment_before_original_hist
     def evidence():
         rows=other.get('/api/hrm/hse_report?company_id=2').json['training']
         return next(row for row in rows if row['employee_id']==eid)
-    assert evidence()['current_level']==4
+    assert evidence()['current_level'] is None and evidence()['evidence_review_required']
+    holding=next(row for row in admin.get('/api/hrm/hse_report?company_id=2').json['training'] if row['employee_id']==eid)
+    assert holding['current_level']==4  # Historical A evidence requires an A scope.
     current=post(admin,ah,'training_assessments?company_id=2',{'employee_id':eid,'competency_code':'S001','level':0,'assessment_date':'1405/08/21'})
     assert next(r for r in admin.get('/api/hrm/training_assessments?company_id=2').json if r['id']==current['id'])['company_id']==2
     assert evidence()['current_level']==0 and evidence()['gap']==3
     assert admin.delete('/api/hrm/training_assessments/'+str(current['id']),headers=ah,json={'version':current['version']}).status_code==200
-    assert evidence()['current_level']==4
+    assert evidence()['current_level'] is None and evidence()['evidence_review_required']
+    holding=next(row for row in admin.get('/api/hrm/hse_report?company_id=2').json['training'] if row['employee_id']==eid)
+    assert holding['current_level']==4
     # With both assessments explicitly voided, a new-company completed grade
     # remains a valid fallback without moving the canonical employee or history.
     assert admin.delete('/api/hrm/training_assessments/'+str(original),headers=ah,json={'version':0}).status_code==200
@@ -458,7 +465,28 @@ def test_transferred_worker_uses_current_company_assessment_before_original_hist
     course=admin.post('/api/data/courses?company_id=2',headers=ah,json={'skill_id':sid2,'title':'New-company completed course','date':'1405/08/01','hours':1,'status':'completed'}).json['id']
     grade=post(admin,ah,'training_records?company_id=2',{'employee_id':eid,'course_id':course,'level':2,'record_date':'1405/08/01'})
     assert next(r for r in admin.get('/api/hrm/training_records?company_id=2').json if r['id']==grade['id'])['company_id']==2
-    assert evidence()['current_level']==2 and evidence()['level_source']=='completed_course'
+    assert evidence()['current_level']==2 and evidence()['level_source']=='completed_course_record'
     with sqlite3.connect(hse['app'].config['DB']) as conn:
         assert conn.execute('SELECT company_id FROM employees WHERE id=?',(eid,)).fetchone()[0]==1
         assert conn.execute('SELECT level FROM assessments WHERE id=?',(original,)).fetchone()[0]==4
+
+
+def test_hse_only_compliance_does_not_disclose_ungranted_assessment_narrative(hse):
+    admin, ah = hse['admin'], hse['ah']
+    eid = hse['ids'][0]
+    assessment = post(admin, ah, 'training_assessments?company_id=1', {
+        'employee_id': eid, 'competency_code': 'S001', 'level': 4, 'assessment_date': '1405/08/21',
+        'assessor_name': 'PRIVATE-ASSESSOR-NAME', 'assessment_method': 'PRIVATE-ASSESSMENT-METHOD',
+        'evidence': 'PRIVATE-ASSESSMENT-NARRATIVE'})
+    officer, oh = hse['actors']['hse-officer']
+    post(officer, oh, 'hse_training_requirements?company_id=1', {'job': 'Engineer', 'activity_location': 'Line A',
+        'domain': 'safety', 'competency_code': 'S001', 'required_level': 3})
+    response = officer.get('/api/hrm/hse_report?company_id=1')
+    assert response.status_code == 200 and 'PRIVATE-' not in response.get_data(as_text=True)
+    record = response.json['training'][0]
+    assert record['current_level'] == 4 and record['assessment_id'] == assessment['id']
+    assert record['assessment_details_authorized'] is False
+    assert record['assessor_name'] is None and record['assessment_evidence'] is None
+    authorized = admin.get('/api/hrm/hse_report?company_id=1').json['training'][0]
+    assert authorized['assessor_name'] == 'PRIVATE-ASSESSOR-NAME'
+    assert authorized['recorded_by']['username'] == 'administrator'

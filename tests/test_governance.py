@@ -80,8 +80,11 @@ class GovernanceTests(unittest.TestCase):
         workbook=openpyxl.load_workbook(io.BytesIO(payload))
         sheet=workbook[DATA_SHEET]
         def upload(values):
-            for col,key in enumerate([cell.value for cell in sheet[5]],1):sheet.cell(7,col,values.get(key,''))
-            stream=io.BytesIO();workbook.save(stream);stream.seek(0)
+            # Reload the branded file: openpyxl consumes embedded-image streams
+            # when saving, while each real upload is a separate completed file.
+            filled=openpyxl.load_workbook(io.BytesIO(payload));data_sheet=filled[DATA_SHEET]
+            for col,key in enumerate([cell.value for cell in data_sheet[5]],1):data_sheet.cell(7,col,values.get(key,''))
+            stream=io.BytesIO();filled.save(stream);filled.close();stream.seek(0)
             return self.manager.post('/api/excel/import/needs?company_id=1',data={'file':(stream,'needs.xlsx'),'mode':'commit','policy':'upsert'},headers={'X-CSRF-Token':self.mcsrf})
         values=dict(skill_code='TEST-X',department='',reason='Gap',priority=2,year=1405,status='approved')
         self.assertEqual(upload(values).status_code,400)

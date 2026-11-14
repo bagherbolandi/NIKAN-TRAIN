@@ -18,6 +18,8 @@ from .hrm_common import (HrmConflict, begin_write, check_version, integer_value,
 from .validation import json_object, positive_id
 from .hrm_workforce import _date_bounds
 
+from .hrm_common import exact_rial_fields
+
 MODULE = 'productivity'
 TABLES = ('hrm_accord_policies', 'hrm_accord_entries', 'hrm_accord_results')
 RECOVERY_ADDITIONS = dict.fromkeys(TABLES, 0)
@@ -170,7 +172,7 @@ def _policy_output(conn, row):
         item['budget_rials'] = None
         item['budget_redacted'] = True
         item['note'] = ''
-    return item
+    return exact_rial_fields(item)
 
 
 def _filters(conn, args):
@@ -210,7 +212,7 @@ def _entry_output(conn, row):
     period = conn.execute('SELECT start_date,end_date FROM hrm_evaluation_periods WHERE id=?', (row['period_id'],)).fetchone()
     item['period_start_date'] = saved.get('start_date', period['start_date'])
     item['period_end_date'] = saved.get('end_date', period['end_date'])
-    return item
+    return exact_rial_fields(item)
 
 
 def _result_output(conn, row):
@@ -228,7 +230,7 @@ def _result_output(conn, row):
     item['period_start_date'] = snapshot['period']['start_date']
     item['period_end_date'] = snapshot['period']['end_date']
     item['evidence'] = snapshot
-    return item
+    return exact_rial_fields(item)
 
 
 def _list_rows(conn, resource, args):
@@ -430,7 +432,7 @@ def _compute(conn, policy, operation=None):
     if not complete_all and rows:
         blockers.append('ارزیابی همه افراد باید برای تمام شاخص‌های فعال کامل باشد')
     token = hashlib.sha256(json.dumps(source, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
-    return dict(rows=rows, period=dict(period), calculation_token=token, finalize_blockers=blockers)
+    return dict(rows=[exact_rial_fields(row) for row in rows], period=dict(period), calculation_token=token, finalize_blockers=blockers)
 
 
 def _metrics(rows, policy, *, full=True):

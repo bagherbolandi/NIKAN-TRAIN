@@ -24,12 +24,12 @@ def validate(installation):
     import app as application_module
     assert Path(application_module.__file__).resolve().parent.parent == installation, 'Application was not imported from the installed payload'
     from app.documents import FIELDS
-    from app.hrm_common import jalali_display
+    from app.hrm_common import jalali_display, today_iso
 
     checks = []
     password = secrets.token_urlsafe(24)
-    today = date.today()
-    iso = today.isoformat()
+    iso = today_iso()
+    today = date.fromisoformat(iso)
     pdf = b'%PDF-1.4\n% Synthetic HRM payload attachment\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n'
     with tempfile.TemporaryDirectory(prefix='nikan-hrm-runtime-validation-') as temporary:
         folder = Path(temporary)
@@ -243,6 +243,95 @@ def validate(installation):
         assert accord_excel.status_code == 200 and accord_excel.data.startswith(b'PK')
         checks.append('canonical eight-item weighted accord, exact-rial participation, explicit financial grants, closed-period finalization and immutable result')
 
+        matrix_path = '/api/hrm/skill-matrix?company_id=1'
+        matrix_probe = admin.get(matrix_path)
+        assert matrix_probe.status_code == 200, ('Canonical skill matrix endpoint is unavailable', matrix_probe.status_code, matrix_probe.get_json())
+        second_skill = admin.post('/api/competency-bank/S002/select?company_id=1', headers=headers)
+        assert second_skill.status_code == 200, second_skill.json
+        write('data/requirements?company_id=1', {'job': 'Synthetic operator',
+              'skill_id': second_skill.json['id'], 'level': 2})
+        assessment_metadata = dict(assessor_name='Synthetic named assessor',
+            assessment_method='Synthetic work observation', evidence='SYNTHETIC-ASSESSMENT-EVIDENCE-014')
+        assessment = write('hrm/training_assessments?company_id=1', {
+            'employee_id': first, 'competency_code': 'S002', 'level': 0,
+            'assessment_date': iso, **assessment_metadata})
+
+        def matrix_cell(client, employee_id):
+            response = client.get(matrix_path)
+            assert response.status_code == 200, response.json
+            return next(row for row in response.json['rows']
+                        if row['employee_id'] == employee_id and row['competency_code'] == 'S002')
+
+        assessed = matrix_cell(admin, first)
+        assert assessed['current_level'] == 0 and assessed['required_level'] == 2 and assessed['gap'] == 2
+        assert assessed['has_assessment'] and assessed['has_current_level'] and assessed['assessment_id'] == assessment['id']
+        assert assessed['assessment_date'] == iso and assessed['assessor_name'] == assessment_metadata['assessor_name']
+        assert assessed['assessment_method'] == assessment_metadata['assessment_method']
+        assert assessed['assessment_evidence'] == assessment_metadata['evidence']
+        assert assessed['recorded_by'] == {'id': me['hrm']['user_id'], 'username': me['username']}
+        unknown = matrix_cell(admin, staff[2]['id'])
+        assert unknown['current_level'] is None and unknown['gap'] is None and unknown['status'] == 'unassessed'
+        overview_path = f'/api/hrm/people/{first}/overview?company_id=1'
+        overview = admin.get(overview_path)
+        assert overview.status_code == 200, overview.json
+        assert overview.json['person']['id'] == first and overview.json['person']['site_id'] == second_site
+        assert overview.json['current_assignment_visible'] and 'national_id' not in overview.json['person']
+        assert overview.json['sections']['contracts']['resource_counts']['contracts'] == 1
+        assert overview.json['sections']['contracts']['resource_counts']['documents'] == 1
+        assert 'training_assessments' in overview.json['sections']['training']['resources']
+        assert 'SYNTHETIC-CLINICAL-PRIVATE' not in overview.get_data(as_text=True)
+        matrix_excel = admin.get('/api/hrm/skill-matrix.xlsx?company_id=1')
+        assert matrix_excel.status_code == 200 and matrix_excel.data.startswith(b'PK')
+        with zipfile.ZipFile(io.BytesIO(matrix_excel.data)) as package:
+            assert package.testzip() is None and 'xl/workbook.xml' in package.namelist()
+        checks.append('single-person dossier links, canonical skill matrix, explicit zero versus unknown and dated assessor/recorder/evidence trace')
+
+        forms = admin.get('/api/hrm/excel/forms?company_id=1')
+        assert forms.status_code == 200, forms.json
+        duplicate_kinds = {'employees', 'assessments', 'courses', 'records'}
+        assert not (duplicate_kinds & {form['kind'] for form in forms.json['legacy_forms']})
+        assert {'people', 'training_assessments', 'training_courses', 'training_records'}.issubset(
+            {form['resource'] for form in forms.json['forms']})
+        template_path = f'/api/hrm/excel/templates/people?company_id=1&site_id={second_site}'
+        template = admin.get(template_path)
+        assert template.status_code == 200 and template.data.startswith(b'PK'), template.get_json()
+        with zipfile.ZipFile(io.BytesIO(template.data)) as package:
+            assert any(name.startswith('xl/media/') for name in package.namelist()), 'Approved Nikan logo missing from input template'
+        import openpyxl
+        workbook = openpyxl.load_workbook(io.BytesIO(template.data))
+        sheet = workbook['ورود اطلاعات']
+        technical_keys = [cell.value for cell in sheet[5]]
+        preview_person = dict(code='000012345', name='Synthetic preview-only person', company_id=1,
+                              site_id=second_site, department='Synthetic other unit', job='Synthetic operator')
+        for key, value in preview_person.items():
+            cell = sheet.cell(7, technical_keys.index(key) + 1, value)
+            if key == 'code':
+                cell.number_format = '@'
+        stream = io.BytesIO(); workbook.save(stream); workbook.close()
+        with closing(sqlite3.connect(app.config['DB'])) as connection:
+            before_preview = dict(
+                employees=connection.execute('SELECT id,code,name FROM employees ORDER BY id').fetchall(),
+                details=connection.execute('SELECT count(*) FROM hrm_employee_details').fetchone()[0],
+                history=connection.execute('SELECT count(*) FROM hrm_employment_history').fetchone()[0],
+                audit=connection.execute('SELECT count(*) FROM audit').fetchone()[0],
+                counters=connection.execute('SELECT * FROM company_registry ORDER BY id').fetchall())
+        preview_import = admin.post(f'/api/hrm/excel/import/people?company_id=1&site_id={second_site}',
+            headers=headers, data={'mode': 'preview', 'policy': 'insert',
+                                   'file': (io.BytesIO(stream.getvalue()), 'Synthetic-HRM-people.xlsx')})
+        assert preview_import.status_code == 200, preview_import.json
+        assert preview_import.json['ok'] and preview_import.json['can_commit'] and not preview_import.json['applied']
+        assert preview_import.json['planned_created'] == 1 and preview_import.json['records'] == []
+        with closing(sqlite3.connect(app.config['DB'])) as connection:
+            after_preview = dict(
+                employees=connection.execute('SELECT id,code,name FROM employees ORDER BY id').fetchall(),
+                details=connection.execute('SELECT count(*) FROM hrm_employee_details').fetchone()[0],
+                history=connection.execute('SELECT count(*) FROM hrm_employment_history').fetchone()[0],
+                audit=connection.execute('SELECT count(*) FROM audit').fetchone()[0],
+                counters=connection.execute('SELECT * FROM company_registry ORDER BY id').fetchall())
+        assert after_preview == before_preview
+        assert admin.get('/api/hrm/accord_results?company_id=1').json == [accord_result]
+        checks.append('unified branded Excel hub excludes duplicate training/personnel entry forms and rolls preview back without changing identity counters or financial results')
+
         backup = admin.post('/api/backup', headers=headers)
         assert backup.status_code == 200 and backup.data.startswith(b'SQLite format 3')
         restored = folder / 'restored';restored.mkdir()
@@ -256,13 +345,20 @@ def validate(installation):
         assert restored_results.status_code == 200 and restored_results.json == [accord_result]
         restored_policy = restored_admin.get(f'/api/hrm/accord_policies/{policy["id"]}?company_id=1')
         assert restored_policy.status_code == 200 and restored_policy.json['status'] == 'finalized'
+        restored_assessed = matrix_cell(restored_admin, first)
+        assert restored_assessed == assessed
+        restored_directory = restored_admin.get('/api/hrm/people-directory?company_id=1')
+        assert restored_directory.status_code == 200
+        assert sum(row['id'] == first for row in restored_directory.json['people']) == 1
+        restored_overview = restored_admin.get(overview_path)
+        assert restored_overview.status_code == 200 and restored_overview.json == overview.json
         with closing(sqlite3.connect(restored_app.config['DB'])) as connection:
             assert connection.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
             assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
             assert connection.execute('SELECT count(*) FROM employees').fetchone()[0] == len(staff)
             assert connection.execute('SELECT count(*) FROM hrm_employee_details').fetchone()[0] == len(staff)
             assert connection.execute('SELECT sum(attended) FROM course_participants').fetchone()[0] == len(staff)
-        checks.append('raw backup/restart preserves central identities, confidential BLOB, actual attendance/cost and exact finalized accord evidence')
+        checks.append('raw backup/restart preserves one central identity, matrix zero and assessment trace, confidential BLOB, actual attendance/cost and exact finalized accord evidence')
     return dict(passed=True, installation=str(installation), platform=sys.platform,
                 python=sys.version.split()[0], checks=checks,
                 synthetic_attachment_sha256=hashlib.sha256(pdf).hexdigest(),

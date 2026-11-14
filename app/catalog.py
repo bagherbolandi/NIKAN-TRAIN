@@ -145,17 +145,22 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
  @app.get('/api/job-summary')
  @authenticated
  def job_summary():
-  cid=company();names=set(r[0] for r in db().execute('SELECT job FROM job_profiles WHERE company_id=? UNION SELECT job FROM requirements WHERE company_id=? UNION SELECT job FROM employees WHERE company_id=? AND job!=?',(cid,cid,cid,'')))
+  from .personnel_identity import current_employee_rows
+  cid=company();staff=current_employee_rows(db(),cid)
+  names={r[0] for r in db().execute('SELECT job FROM job_profiles WHERE company_id=? UNION SELECT job FROM requirements WHERE company_id=?',(cid,cid))}
+  names.update(r['job'] for r in staff if r['job'])
   result=[]
   for name in sorted(names):
    p=db().execute('SELECT * FROM job_profiles WHERE company_id=? AND job=?',(cid,name)).fetchone()
-   result.append({'job':name,'department':p['department'] if p else '', 'profile_id':p['id'] if p else None,'employees':db().execute('SELECT count(*) FROM employees WHERE company_id=? AND job=?',(cid,name)).fetchone()[0],'skills':db().execute('SELECT count(*) FROM requirements WHERE company_id=? AND job=?',(cid,name)).fetchone()[0]})
+   result.append({'job':name,'department':p['department'] if p else '', 'profile_id':p['id'] if p else None,'employees':sum(r['job']==name for r in staff),'skills':db().execute('SELECT count(*) FROM requirements WHERE company_id=? AND job=?',(cid,name)).fetchone()[0]})
   return jsonify(result)
  @app.route('/api/assessment-workspace/<int:eid>',methods=['GET','PUT'])
  @authenticated
  def assessment_workspace(eid):
-  cid=company();eid=positive_id(eid);e=db().execute('SELECT * FROM employees WHERE id=? AND company_id=?',(eid,cid)).fetchone()
-  if not e:return error('فرد یافت نشد',404)
+  cid=company();eid=positive_id(eid)
+  from .hrm_access import employee as current_training_employee
+  e=current_training_employee(db(),eid,'training',operation='edit' if request.method=='PUT' else 'read')
+  if e['company_id']!=cid:return error('فرد یافت نشد',404)
   if request.method=='PUT':
    if g.user['role']=='viewer':raise PermissionError()
    items=json_object().get('items')
@@ -172,17 +177,23 @@ def register(app,db,authenticated,company,audit,error,validate_refs,gaps):
    db().execute('BEGIN IMMEDIATE')
    for code,level in checked:
     sid=attach(db(),cid,code)
-    retained=db().execute('SELECT a.id FROM assessments a JOIN hrm_training_assessment_context x ON x.assessment_id=a.id WHERE a.company_id=? AND a.employee_id=? AND a.skill_id=? AND x.is_deleted=1',(cid,eid,sid)).fetchone()
-    if retained:raise HrmConflict('این ارزیابی در سوابق آموزش ابطال شده است؛ برای بازبینی از مدیریت آموزش استفاده کنید')
+    retained=db().execute('SELECT a.id FROM assessments a JOIN hrm_training_assessment_context x ON x.assessment_id=a.id WHERE a.company_id=? AND a.employee_id=? AND a.skill_id=? ',(cid,eid,sid)).fetchone()
+    if retained:raise HrmConflict('این ارزیابی دارای نسخه و شواهد ثبت‌شده است؛ از فرم یکپارچه ارزیابی آموزش استفاده کنید')
     db().execute('INSERT INTO assessments(company_id,employee_id,skill_id,level) VALUES (?,?,?,?) ON CONFLICT(company_id,employee_id,skill_id) DO UPDATE SET level=excluded.level',(cid,eid,sid,level))
    audit('batch_employee_assessment',cid,str(eid));db().commit()
-  matrix=[dict(r) for r in db().execute('SELECT b.*,s.id skill_id,COALESCE(p.level,r.level,0) required,COALESCE(a.level,0) current FROM holding_competencies b LEFT JOIN competency_links l ON l.code=b.code AND l.skill_id IN (SELECT id FROM skills WHERE company_id=?) LEFT JOIN skills s ON s.id=l.skill_id LEFT JOIN requirements r ON r.skill_id=s.id AND r.company_id=? AND r.job=? LEFT JOIN personal_requirements p ON p.skill_id=s.id AND p.employee_id=? LEFT JOIN hrm_live_assessments a ON a.skill_id=s.id AND a.employee_id=? AND a.company_id=? ORDER BY b.category,b.code',(cid,cid,e['job'],eid,eid,cid))]
+  from .hrm_matrix import person_matrix_rows
+  matrix=person_matrix_rows(db(),eid,include_all=True)
   return jsonify(employee=dict(e),matrix=matrix)
  @app.get('/api/needs-summary')
  @authenticated
  def needs_summary():
   cid=company();data={};catalog={r['id']:r for r in rows(db(),cid)}
   for r in gaps(cid):
-   c=catalog[r['skill_id']];d=data.setdefault(c['code'],{'code':c['code'],'title':c['title'],'category':c['category'],'importance':c['importance'],'employees':[],'gap_total':0})
-   d['employees'].append(r);d['gap_total']+=r['gap']
+   c=catalog.get(r.get('skill_id'))
+   code=c['code'] if c else r['competency_code']
+   d=data.setdefault(code,{'code':code,'title':c['title'] if c else r['title'],'category':c['category'] if c else r.get('category',''),'importance':c['importance'] if c else r['importance'],'employees':[],'gap_total':0,'unknown_count':0})
+   d['employees'].append(r)
+   if r['gap'] is None:d['unknown_count']+=1
+   else:d['gap_total']+=r['gap']
+   d['gap_total_is_partial']=bool(d['unknown_count'])
   return jsonify(sorted([dict(r,people=len(r['employees'])) for r in data.values()],key=lambda r:(-r['importance'],-r['people'],r['code'])))

@@ -51,7 +51,7 @@ PERMISSIONS_DDL = """CREATE TABLE {name}(
 OPERATIONS = ('read', 'create', 'edit', 'delete', 'export')
 ALL_COMPANY_ROLES = frozenset({'system_admin','holding_manager','holding_hr','training_officer','hse_officer','executive'})
 RECOVERY_ADDITIONS = {'hrm_user_access': 0, 'hrm_user_scopes': 0,
-                      'hrm_user_permissions': 0, 'hrm_schema_migrations': 3}
+                      'hrm_user_permissions': 0, 'hrm_schema_migrations': 4}
 
 
 def initialize(conn):
@@ -137,6 +137,14 @@ def _context(conn, user):
                 flags={op:bool(row['can_'+op]) for op in OPERATIONS}
                 flags['write']=flags['create'] or flags['edit'] or flags['delete']
                 permissions[row['module']]=flags
+    if not binding and not primary and user.get('company_id'):
+        # Existing company accounts already had training access. Project that
+        # same grant into the shared readers; never infer personnel/medical or
+        # financial permissions from a legacy training role.
+        scopes=[dict(company_id=user['company_id'],site_id=None,department='')]
+        editable=user['role']=='manager'
+        permissions['training']={read:enabled for read,enabled in
+            [('read',True),('create',editable),('edit',editable),('delete',editable),('export',True),('write',editable)]}
     if primary:
         permissions={key:{**{op:True for op in OPERATIONS},'write':True} for key in MODULES}
     ids=sorted({s['company_id'] for s in scopes})

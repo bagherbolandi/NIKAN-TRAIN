@@ -1,15 +1,16 @@
-# اعتبارسنجی Nikan HRM ۰٫۱۳
+# اعتبارسنجی Nikan HRM ۰٫۱۴
 
-گزارش جاری در [validation-0.13.md](docs/validation-0.13.md) و فایل‌های JSON/XML همراه آن ثبت می‌شود. گزارش‌های نسخه‌های قبلی صرفاً سابقه همان انتشارها هستند.
+گزارش جاری در [validation-0.14.md](docs/validation-0.14.md) و فایل‌های JSON/XML همراه آن ثبت می‌شود. گزارش‌های نسخه‌های قبلی صرفاً سابقه همان انتشارها هستند.
 
 ## اجرای مجدد
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q --junitxml=docs/pytest-0.13-final.xml
+.venv/bin/python -m pytest -q --junitxml=docs/pytest-0.14-final.xml
 .venv/bin/python tests/browser_hrm_smoke.py
 .venv/bin/python tests/browser_org_accord_smoke.py
+.venv/bin/python tests/browser_person_workspace_smoke.py
 .venv/bin/python packaging/validate_hrm_payload.py --install . --report /tmp/hrm-source-result.json
 ```
 

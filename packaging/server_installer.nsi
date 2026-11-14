@@ -100,7 +100,7 @@ Section "Network Server"
  WriteINIStr "$DESKTOP\Nikan Training Network.url" "InternetShortcut" "IconFile" "$INSTDIR\nikan.ico"
  WriteINIStr "$DESKTOP\Nikan Training Network.url" "InternetShortcut" "IconIndex" "0"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTrainingServer" "DisplayName" "Nikan HRM Network Server"
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTrainingServer" "DisplayVersion" "0.13.0"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTrainingServer" "DisplayVersion" "0.14.0"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\NikanTrainingServer" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
 SectionEnd
 Section "Uninstall"

@@ -361,6 +361,10 @@ def register(app, db, authenticated, audit, error):
             metric('training_competency_gaps','الزامات دارای گپ شایستگی',training['competency_gaps'] if training.get('requirements') else None,'مورد')
             metric('training_unknown_requirements','الزامات بدون ارزیابی معتبر',training.get('unknown_requirements') if training.get('requirements') else None,'مورد')
             metric('training_renewal_due','آموزش‌های دوره‌ای سررسیدشده',training.get('renewal_due') if training.get('requirements') else None,'مورد')
+            renewal_review=training_detail.get('unknowns',{}).get('renewal_without_actual_date',0)
+            metric('training_renewal_review','اعتبار آموزش نیازمند تأیید شواهد حضور',renewal_review if training.get('requirements') else None,'مورد')
+            if renewal_review:
+                quality.append(f'حضور واقعی یا تاریخ آموزش {renewal_review} الزام دوره‌ای باید تأیید شود؛ وضعیت آن‌ها مناسب فرض نشده است.')
             if training['achievement_percent'] is None:
                 quality.append('برای محاسبه تحقق آموزش، برنامه مستند در این محدوده ثبت نشده است.')
             if training_detail.get('data_status')=='no_configured_requirements':

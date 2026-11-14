@@ -116,7 +116,7 @@ def test_medical_document_exports_require_the_actual_group_export_grant(core):
 def test_automatic_preupgrade_snapshot_is_verified_and_preserves_facts(core):
     app,_,_,_,eid,root=core
     with sqlite3.connect(app.config['DB']) as conn:
-        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.13'")
+        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.14'")
         expected=conn.execute('SELECT * FROM employees ORDER BY id').fetchall()
     upgraded=create_app(root,True)
     report=upgraded.extensions['hrm_upgrade_backup']
@@ -132,7 +132,7 @@ def test_network_preupgrade_snapshot_is_authenticated_and_old_markers_can_append
     app,_,_,_,_,root=core
     key=secrets.token_bytes(32);(root/'keys').mkdir();(root/'keys/recovery.key').write_bytes(key)
     with sqlite3.connect(app.config['DB']) as conn:
-        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.13'")
+        conn.execute("DELETE FROM hrm_schema_migrations WHERE version='hrm-0.14'")
         expected=conn.execute('SELECT * FROM employees ORDER BY id').fetchall()
     upgraded=create_app(root,True);report=upgraded.extensions['hrm_upgrade_backup']
     assert report['encrypted'] and report['file'].endswith('.nikbak')
@@ -182,3 +182,21 @@ def test_structure_catalog_write_controls_belong_to_primary_admin(core):
         assert schema[name]['can_read']
         assert not any(schema[name]['can_'+operation] for operation in ('create','edit','delete','write'))
         assert all(primary[name]['can_'+operation] for operation in ('create','edit','delete','write'))
+
+
+def test_write_only_personnel_update_does_not_return_unread_private_fields(core):
+    _,admin,h,_,eid,_=core
+    current=next(row for row in admin.get('/api/hrm/people?company_id=1').json if row['id']==eid)
+    stored=admin.put(f'/api/hrm/people/{eid}?company_id=1',headers=h,json={
+        'version':current['version'],'address':'PRIVATE-ADDRESS-NOT-IN-UPDATE'})
+    assert stored.status_code==200,stored.json
+    editor=account(core,'personnel-write-only',{'personnel':{'edit':True}})
+    token={'X-CSRF-Token':editor.get('/api/me').json['csrf']}
+    response=editor.put(f'/api/hrm/people/{eid}?company_id=1',headers=token,json={
+        'version':stored.json['version'],'name':'Authorized identity correction'})
+    assert response.status_code==200,response.json
+    assert set(response.json)=={'id','version'}
+    assert 'PRIVATE-ADDRESS' not in response.get_data(as_text=True)
+    assert editor.get('/api/hrm/people?company_id=1').status_code==403
+    saved=next(row for row in admin.get('/api/hrm/people?company_id=1').json if row['id']==eid)
+    assert saved['name']=='Authorized identity correction' and saved['address']=='PRIVATE-ADDRESS-NOT-IN-UPDATE'

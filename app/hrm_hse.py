@@ -451,21 +451,9 @@ def _list(conn,resource,cid=None):
     return [dict(r) for r in conn.execute(sql+' WHERE '+' AND '.join('('+x+')' for x in where)+' ORDER BY r.id DESC LIMIT 5000',params)]
 
 
-def _training_evidence(conn,person,code):
-    # Current employment can differ from the preserved training identity after
-    # a transfer. A current-company assessment, including zero, is authoritative;
-    # only its absence permits the original company's retained assessment.
-    owners=list(dict.fromkeys([person['company_id'],person['training_company_id']]))
-    placeholders=','.join('?' for _ in owners)
-    current=conn.execute('SELECT a.level FROM hrm_live_assessments a JOIN competency_links l ON l.skill_id=a.skill_id WHERE a.employee_id=? AND a.company_id IN ('+placeholders+') AND l.code=? ORDER BY CASE WHEN a.company_id=? THEN 0 ELSE 1 END,a.id DESC LIMIT 1',[person['id'],*owners,code,person['company_id']]).fetchall()
-    completed=conn.execute("SELECT t.level,c.date FROM hrm_live_records t JOIN courses c ON c.id=t.course_id JOIN competency_links l ON l.skill_id=c.skill_id WHERE t.employee_id=? AND t.company_id IN ("+placeholders+") AND c.status='completed' AND l.code=?",[person['id'],*owners,code]).fetchall()
-    attended=conn.execute("SELECT c.date FROM course_participants p JOIN courses c ON c.id=p.course_id JOIN competency_links l ON l.skill_id=c.skill_id WHERE p.employee_id=? AND p.attended=1 AND c.status='completed' AND l.code=?",(person['id'],code)).fetchall()
-    dates=[]
-    for row in [*completed,*attended]:
-        try:dates.append(date_value(row['date'],True))
-        except ValueError:pass
-    level=current[0]['level'] if current else max([r['level'] for r in completed],default=0)
-    return dict(current_level=level,level_source='current_assessment' if current else ('completed_course' if completed else 'none'),last_training_date=max(dates) if dates else '')
+def _training_evidence(conn,person,code,module='hse'):
+    from .hrm_training_evidence import scoped_training_evidence
+    return scoped_training_evidence(conn,person,code,module,as_of=today_iso())
 
 
 def _people(conn,module,cid=None):
@@ -487,16 +475,24 @@ def _rules(conn,table,module,cid=None):
 
 def _training_report(conn,people,domains):
     rows=[];today=today_iso()
+    from .hrm_training_evidence import applicable_hse_training_rules
+    module='hse' if domains=={'safety'} else 'health_environment'
     for person in people:
-        rules=conn.execute('SELECT r.*,b.title competency_title FROM hrm_hse_training_requirements r JOIN holding_competencies b ON b.code=r.competency_code WHERE r.company_id=? AND r.active=1 AND r.is_deleted=0',(person['company_id'],)).fetchall()
+        rules=applicable_hse_training_rules(conn,person,module)
         for rule in rules:
-            if rule['domain'] not in domains or not _matches(rule,person):continue
-            evidence=_training_evidence(conn,person,rule['competency_code'])
-            renewal_due=bool(rule['renewal_days'] and (not evidence['last_training_date'] or (date.fromisoformat(evidence['last_training_date'])+timedelta(days=rule['renewal_days'])).isoformat()<today))
-            gap=max(0,rule['required_level']-evidence['current_level'])
+            if rule['domain'] not in domains:continue
+            evidence=_training_evidence(conn,person,rule['competency_code'],module)
+            from .hrm_training_evidence import renewal_evidence
+            renewal=renewal_evidence(evidence['last_training_date'],rule['renewal_days'],today)
+            level=evidence['current_level']
+            gap=max(0,rule['required_level']-level) if level is not None else None
+            review=level is None or renewal['renewal_review_required']
             rows.append(dict(employee_id=person['id'],employee_name=person['name'],employee_code=person['code'],company_id=person['company_id'],site_id=person['site_id'],
                 department=person['department'],job=person['job'],activity_location=person['location'],requirement_id=rule['id'],domain=rule['domain'],
-                competency_code=rule['competency_code'],competency_title=rule['competency_title'],required_level=rule['required_level'],**evidence,gap=gap,renewal_due=renewal_due,training_due=bool(gap or renewal_due)))
+                competency_code=rule['competency_code'],competency_title=rule['competency_title'],required_level=rule['required_level'],
+                **evidence,**renewal,gap=gap,evidence_review_required=review,
+                training_due=bool((gap is not None and gap>0) or renewal['renewal_due'] is True or review)))
+
     return rows
 
 

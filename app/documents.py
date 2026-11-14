@@ -228,10 +228,10 @@ CREATE TABLE IF NOT EXISTS personal_documents(employee_id INTEGER PRIMARY KEY RE
   import openpyxl
   from openpyxl.styles import Font,PatternFill,Alignment
   from openpyxl.utils import get_column_letter
-  cid=company();rows=sorted(gaps(cid),key=lambda r:(r['department'],r['name'],r['code'],r['title'],r['skill_id']))
+  cid=company();rows=sorted(gaps(cid),key=lambda r:(r['department'],r['name'],r['code'],r['title'],r.get('competency_code','')))
   people={};skills={}
   for r in rows:
-   people.setdefault(r['employee_id'],[]).append(r);skills.setdefault(r['skill_id'],[]).append(r)
+   people.setdefault(r['employee_id'],[]).append(r);skills.setdefault(r.get('competency_code') or r['skill_id'],[]).append(r)
   wb=openpyxl.Workbook();wb.remove(wb.active)
   def sheet(name,headers,records):
    ws=wb.create_sheet(name);ws.sheet_view.rightToLeft=True;ws.append(headers)
@@ -241,9 +241,9 @@ CREATE TABLE IF NOT EXISTS personal_documents(employee_id INTEGER PRIMARY KEY RE
    for row in ws.iter_rows(min_row=2):
     for c in row:c.alignment=Alignment(vertical='top',wrap_text=True)
    for i in range(1,len(headers)+1):ws.column_dimensions[get_column_letter(i)].width=24 if i<5 else 48
-  sheet('افراد', ['کد پرسنلی','نام فرد','واحد','شغل','تعداد نیاز','نیازهای آموزشی و فاصله سطح'],[[rs[0]['code'],rs[0]['name'],rs[0]['department'],rs[0]['job'],len(rs),'\n'.join(f"{r['title']} | لازم {r['required']}، فعلی {r['current']}، گپ {r['gap']}" for r in rs)] for rs in people.values()])
+  sheet('افراد', ['کد پرسنلی','نام فرد','واحد','شغل','تعداد نیاز','نیازهای آموزشی و فاصله سطح'],[[rs[0]['code'],rs[0]['name'],rs[0]['department'],rs[0]['job'],len(rs),'\n'.join(f"{r['title']} | لازم {r['required']}، فعلی {r['current'] if r['current'] is not None else 'نامشخص'}، گپ {r['gap'] if r['gap'] is not None else 'نیازمند ارزیابی'}" for r in rs)] for rs in people.values()])
   grouped=sorted(skills.values(),key=lambda rs:(-rs[0]['importance'],rs[0]['title']))
-  sheet('شایستگی‌ها',['شایستگی','اهمیت','تعداد افراد','جمع گپ','افراد نیازمند'],[[rs[0]['title'],rs[0]['importance'],len(rs),sum(r['gap'] for r in rs),'\n'.join(f"{r['name']} ({r['code']}) — {r['department']}" for r in rs)] for rs in grouped])
+  sheet('شایستگی‌ها',['شایستگی','اهمیت','تعداد افراد','جمع گپ مشخص','افراد نیازمند','تعداد ارزیابی نامشخص'],[[rs[0]['title'],rs[0]['importance'],len(rs),sum(r['gap'] for r in rs if r['gap'] is not None),'\n'.join(f"{r['name']} ({r['code']}) — {r['department']}" for r in rs),sum(r['gap'] is None for r in rs)] for rs in grouped])
   # The normalized detail sheet retains explicit keys so sorting/filtering never loses identity.
   sheet('جزئیات قابل فیلتر',['کد پرسنلی','نام فرد','واحد','شغل','شایستگی','سطح لازم','سطح فعلی','گپ','اهمیت'],[[r[k] for k in ['code','name','department','job','title','required','current','gap','importance']] for r in rows])
   out=io.BytesIO();wb.save(out)

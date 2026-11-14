@@ -16,6 +16,7 @@ from .catalog import attach
 from .hrm_common import (HrmConflict, begin_write, check_version, date_value,
                          integer_value, jalali_display, text_value, today_iso)
 from .validation import json_object, number, positive_id, jalali_date
+from .hrm_training_evidence import scoped_training_evidence, renewal_evidence, applicable_hse_training_rules
 
 
 SCHEMA = '''
@@ -34,7 +35,9 @@ CREATE TABLE IF NOT EXISTS hrm_training_assessment_context(
  company_id INTEGER NOT NULL REFERENCES companies(id),site_id INTEGER REFERENCES hrm_sites(id),
  department TEXT NOT NULL DEFAULT '',date_iso TEXT NOT NULL DEFAULT '',
  version INTEGER NOT NULL DEFAULT 1,is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0,1)),
- history_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(history_json) AND json_type(history_json)='array'));
+ history_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(history_json) AND json_type(history_json)='array'),
+ recorded_by INTEGER REFERENCES users(id),assessor_name TEXT NOT NULL DEFAULT '',
+ assessment_method TEXT NOT NULL DEFAULT '',evidence TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS hrm_training_requirements(
  id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),site_id INTEGER REFERENCES hrm_sites(id),
  department TEXT NOT NULL DEFAULT '',job TEXT NOT NULL DEFAULT '',activity_location TEXT NOT NULL DEFAULT '',
@@ -78,15 +81,20 @@ CATALOG = {
     ], columns=['employee_name', 'title', 'site_name', 'department', 'record_date', 'level', 'score', 'attended', 'status']),
     'training_assessments': dict(title='ارزیابی فعلی شایستگی کارکنان', module='training', fields=[
         PERSON, BANK, LEVEL, field('assessment_date', 'تاریخ ارزیابی', 'date', required=True),
-    ], columns=['employee_name', 'competency_title', 'site_name', 'department', 'assessment_date', 'level']),
+        field('assessor_name', 'نام ارزیاب اعلام‌شده (خالی: نامشخص)'),
+        field('assessment_method', 'روش ارزیابی (آزمون، مشاهده کار، مصاحبه یا ترکیبی)'),
+        field('evidence', 'شرح مستند ارزیابی', 'textarea'),
+    ], columns=['employee_name', 'competency_title', 'site_name', 'department', 'assessment_date', 'level', 'assessor_name', 'assessment_method', 'recorded_by_name']),
     'training_assessment_history': dict(title='تاریخچه نسخه‌های ارزیابی شایستگی', module='training', read_only=True, fields=[
         field('employee_name', 'نام و نام خانوادگی'), field('competency_title', 'شایستگی'),
         field('company_name', 'شرکت ثبت‌کننده'), field('site_name', 'سایت ثبت‌کننده'), field('department', 'واحد ثبت‌کننده'),
         field('assessment_date', 'تاریخ ارزیابی', 'date'), field('level', 'سطح شایستگی نسخه قبلی', 'number'),
+        field('assessor_name','ارزیاب اعلام‌شده'),field('assessment_method','روش ارزیابی'),
+        field('evidence','شرح مستند ارزیابی','textarea'),field('recorded_by_name','ثبت‌کننده این نسخه'),
         field('version', 'نسخه', 'number'), field('change_kind', 'نوع تغییر', 'select', choices=[
             ['reevaluated_after_transfer', 'ارزیابی جدید پس از جابه‌جایی'], ['edited', 'اصلاح ارزیابی'], ['voided', 'ابطال ارزیابی']]),
     ],
-        columns=['employee_name', 'competency_title', 'company_name', 'site_name', 'department', 'assessment_date', 'level', 'version', 'change_kind']),
+        columns=['employee_name', 'competency_title', 'company_name', 'site_name', 'department', 'assessment_date', 'level', 'assessor_name', 'assessment_method', 'recorded_by_name', 'version', 'change_kind']),
     'training_requirements': dict(title='الزامات عمومی، بدو استخدام و تجدید آموزش', module='training', fields=[
         COMPANY, SITE, field('department', 'واحد (خالی: همه واحدها)'), field('job', 'شغل (خالی: همه شغل‌ها)'),
         field('activity_location', 'محل فعالیت (خالی: همه محل‌ها)'), BANK,
@@ -186,6 +194,11 @@ def _get(conn, resource, rid):
         else:
             result['employee_name'] = conn.execute('SELECT name FROM employees WHERE id=?', (row['employee_id'],)).fetchone()[0]
             result['record_date' if resource == 'training_records' else 'assessment_date'] = result['date_iso']
+            if resource == 'training_assessments':
+                for key, fallback in (('recorded_by',None),('assessor_name',''),('assessment_method',''),('evidence','')):
+                    result.setdefault(key,fallback)
+                recorder = conn.execute('SELECT username FROM users WHERE id=?',(result['recorded_by'],)).fetchone() if result['recorded_by'] else None
+                result['recorded_by_name'] = recorder['username'] if recorder else None
     if resource == 'training_records':
         course = conn.execute('SELECT title,status FROM courses WHERE id=?', (row['course_id'],)).fetchone()
         result.update(title=course['title'], status=course['status'])
@@ -204,10 +217,10 @@ def _get(conn, resource, rid):
 
 
 def _legacy_person_access(conn, row, operation=None):
-    person = access.employee(conn, row['employee_id'], 'training', operation=operation)
-    access.company_scope(conn, row['company_id'], 'training', operation=operation,
-                         site_id=person.get('site_id'), department=person.get('department'))
-    return person
+    # The owner of a contextless historical fact is its recorded company.
+    # Its unknown site is never borrowed from today's personnel assignment.
+    return access.record_scope(conn,dict(company_id=row['company_id'],site_id=None,department=''),
+                               'training',operation=operation)
 
 
 def _course_access(conn, course, operation=None, writing=False):
@@ -317,7 +330,8 @@ def _append_assessment_history(conn, previous, change_kind):
     context = _context(conn, 'training_assessments', previous['id'])
     history = json.loads(context['history_json']) if context else []
     item = {key: previous.get(key) for key in ('company_id', 'site_id', 'department', 'employee_id',
-            'employee_name', 'competency_code', 'competency_title', 'level', 'version', 'date_iso', 'is_deleted')}
+            'employee_name', 'competency_code', 'competency_title', 'level', 'version', 'date_iso', 'is_deleted',
+            'recorded_by','recorded_by_name','assessor_name','assessment_method','evidence')}
     item.update(assessment_id=previous['id'], assessment_date=previous.get('date_iso', ''), change_kind=change_kind,
                 changed_by=g.user['id'], changed_at=datetime.now(timezone.utc).isoformat())
     history.append(item)
@@ -330,9 +344,13 @@ def _append_assessment_history(conn, previous, change_kind):
                       previous.get('date_iso', ''), previous['version'], previous['is_deleted'], encoded))
 
 
-def _history_rows(conn, apply_filters=True):
+def _history_rows(conn, apply_filters=True, employee_id=None):
     rows = []
-    for context in conn.execute("SELECT history_json FROM hrm_training_assessment_context WHERE history_json!='[]'"):
+    query="SELECT x.history_json FROM hrm_training_assessment_context x JOIN assessments a ON a.id=x.assessment_id WHERE x.history_json!='[]'"
+    params=[]
+    if employee_id is not None:
+        query+=' AND a.employee_id=?';params.append(positive_id(employee_id))
+    for context in conn.execute(query,params):
         for value in json.loads(context['history_json']):
             if not isinstance(value, dict) or not {'company_id', 'employee_id', 'assessment_id', 'version', 'level'} <= set(value):
                 raise ValueError('ساختار تاریخچه ارزیابی شایستگی معتبر نیست')
@@ -483,6 +501,11 @@ def _save_record(conn, data, previous=None):
     return rid, version, owner
 
 
+def _save_assessment_details(conn,rid,metadata):
+    conn.execute('UPDATE hrm_training_assessment_context SET recorded_by=?,assessor_name=?,assessment_method=?,evidence=? WHERE assessment_id=?',
+                 (g.user['id'],metadata['assessor_name'],metadata['assessment_method'],metadata['evidence'],rid))
+
+
 def _save_assessment(conn, data, previous=None):
     operation = 'edit' if previous else 'create'
     values = {**(previous or {}), **data}
@@ -501,6 +524,7 @@ def _save_assessment(conn, data, previous=None):
         raise HrmConflict('شایستگی ارزیابی قبلی قابل تعویض نیست')
     level = integer_value(values.get('level'), minimum=0, maximum=4)
     iso = date_value(values.get('assessment_date'), required=True)
+    metadata={key:text_value(values.get(key,''),max_length=4000 if key=='evidence' else 300) for key in ('assessor_name','assessment_method','evidence')}
     if not previous:
         existing = conn.execute('SELECT id FROM assessments WHERE company_id=? AND employee_id=? AND skill_id=?', (owner['company_id'], eid, sid)).fetchone()
         if existing:
@@ -517,14 +541,16 @@ def _save_assessment(conn, data, previous=None):
             rid = old['id']
             conn.execute('UPDATE assessments SET level=? WHERE id=?', (level, rid))
             version = _save_context(conn, 'training_assessments', rid, owner, iso, old, replace_owner=True)
+            _save_assessment_details(conn,rid,metadata)
             return rid, version, owner
     if previous:
-        if previous['level'] != level or previous['date_iso'] != iso:
+        if previous['level'] != level or previous['date_iso'] != iso or any(metadata[key]!=previous.get(key,'') for key in metadata) or previous.get('recorded_by')!=g.user['id']:
             _append_assessment_history(conn, previous, 'edited')
         rid = previous['id']; conn.execute('UPDATE assessments SET level=? WHERE id=?', (level, rid))
     else:
         rid = conn.execute('INSERT INTO assessments(company_id,employee_id,skill_id,level) VALUES (?,?,?,?)', (owner['company_id'], eid, sid, level)).lastrowid
     version = _save_context(conn, 'training_assessments', rid, owner, iso, previous)
+    _save_assessment_details(conn,rid,metadata)
     return rid, version, owner
 
 
@@ -552,14 +578,19 @@ def _save_policy(conn, data, previous=None):
     return rid, version, owner
 
 
-def list_rows(conn, resource, apply_filters=True):
+def list_rows(conn, resource, apply_filters=True, employee_id=None):
     access.require(conn, 'training')
     if apply_filters:
         _validate_query_scope(conn)
     if resource == 'training_assessment_history':
-        return _history_rows(conn, apply_filters)
+        return _history_rows(conn, apply_filters,employee_id)
+    query='SELECT id FROM '+TABLES[resource];params=[]
+    if employee_id is not None:
+        eid=positive_id(employee_id)
+        if resource not in ('training_records','training_assessments'):raise ValueError('این فهرست سابقه فردی نیست')
+        query+=' WHERE employee_id=?';params.append(eid)
     rows = []
-    for entry in conn.execute('SELECT id FROM '+TABLES[resource]+' ORDER BY id DESC'):
+    for entry in conn.execute(query+' ORDER BY id DESC',params):
         row = _get(conn, resource, entry['id'])
         if row['is_deleted']:
             continue
@@ -588,9 +619,12 @@ def _people(conn):
     return result
 
 
-def _actual_rows(conn, apply_filters=True):
+def _actual_rows(conn, apply_filters=True, employee_id=None):
     result = []
-    for row in conn.execute('SELECT p.*,c.hours,c.status,c.date,c.skill_id,c.title,e.name employee_name FROM course_participants p JOIN courses c ON c.id=p.course_id JOIN employees e ON e.id=p.employee_id WHERE p.attended=1'):
+    query='SELECT p.*,c.hours,c.status,c.date,c.skill_id,c.title,e.name employee_name FROM course_participants p JOIN courses c ON c.id=p.course_id JOIN employees e ON e.id=p.employee_id WHERE p.attended=1';params=[]
+    if employee_id is not None:
+        query+=' AND p.employee_id=?';params.append(positive_id(employee_id))
+    for row in conn.execute(query,params):
         row = dict(row)
         snapshot = dict(company_id=row['attendance_company_id'], site_id=row['attendance_site_id'], department=row['attendance_department'])
         try:
@@ -617,10 +651,7 @@ def training_report(conn):
     # Activity totals follow the selected period. Compliance uses the complete
     # authorized history, so a valid earlier course never becomes "unknown"
     # merely because its date is outside the displayed activity window.
-    all_actual = _actual_rows(conn, apply_filters=False)
     courses = list_rows(conn, 'training_courses')
-    records = list_rows(conn, 'training_records', apply_filters=False)
-    assessments = list_rows(conn, 'training_assessments', apply_filters=False)
     policies = list_rows(conn, 'training_requirements', apply_filters=False)
     today = today_iso(); requirements = []
     for person in people:
@@ -640,25 +671,32 @@ def training_report(conn):
                 previous['sources'].append('configured_general_policy')
             else:
                 rules[rule['competency_code']] = dict(competency_code=rule['competency_code'], competency_title=rule['competency_title'], required_level=rule['required_level'], renewal_days=rule['renewal_days'], onboarding=rule['onboarding'], sources=['configured_general_policy'])
+        for rule in applicable_hse_training_rules(conn,person,'training'):
+            reference=dict(module=rule['source_module'],resource=rule['source_resource'],id=rule['source_id'],domain=rule['domain'])
+            previous=rules.get(rule['competency_code'])
+            if previous:
+                previous['required_level']=max(previous['required_level'],rule['required_level'])
+                previous['renewal_days']=min(value for value in (previous['renewal_days'],rule['renewal_days']) if value is not None) if previous['renewal_days'] or rule['renewal_days'] else None
+                if 'hse_curriculum' not in previous['sources']:previous['sources'].append('hse_curriculum')
+                previous.setdefault('source_refs',[]).append(reference)
+            else:
+                rules[rule['competency_code']]=dict(competency_code=rule['competency_code'],competency_title=rule['competency_title'],
+                    required_level=rule['required_level'],renewal_days=rule['renewal_days'],onboarding=0,
+                    sources=['hse_curriculum'],source_refs=[reference])
         for rule in rules.values():
             if rule['required_level'] == 0 and not rule['onboarding'] and rule['renewal_days'] is None:
                 continue
-            current = [row for row in assessments if row['employee_id'] == person['id'] and row['competency_code'] == rule['competency_code']]
-            current.sort(key=lambda row: (row['company_id'] == person['company_id'], row.get('date_iso', ''), row['id']), reverse=True)
-            completed = [row for row in records if row['employee_id'] == person['id'] and row['status'] == 'completed' and conn.execute('SELECT 1 FROM courses c JOIN competency_links l ON l.skill_id=c.skill_id WHERE c.id=? AND l.code=?', (row['course_id'], rule['competency_code'])).fetchone()]
-            level = current[0]['level'] if current else max((row['level'] for row in completed), default=None)
-            dates = [row['date_iso'] for row in all_actual if row['employee_id'] == person['id'] and row['competency_code'] == rule['competency_code'] and row['status'] == 'completed' and row['date_iso']]
-            last = max(dates) if dates else ''
-            expiry = (date.fromisoformat(last) + timedelta(days=rule['renewal_days'])).isoformat() if last and rule['renewal_days'] and date.fromisoformat(last).toordinal() + rule['renewal_days'] <= date.max.toordinal() else ''
+            evidence = scoped_training_evidence(conn,person,rule['competency_code'],'training',as_of=today)
+            level = evidence['current_level']; last = evidence['last_training_date']
+            renewal = renewal_evidence(last,rule['renewal_days'],today)
             onboarding_missing = (not last or last < person['start_date']) if rule['onboarding'] and person['start_date'] else None
             requirements.append(dict(employee_id=person['id'], employee_name=person['name'], company_id=person['company_id'], site_id=person.get('site_id'), department=person['department'], **rule,
-                                     current_level=level, level_source='current_assessment' if current else 'completed_course_record' if completed else 'unknown',
+                                     **evidence, **renewal,
                                      gap=max(0, rule['required_level'] - level) if level is not None else None,
-                                     last_training_date=last, renewal_due_date=expiry,
-                                     renewal_due=expiry <= today if expiry else None,
                                      onboarding_missing=onboarding_missing,
-                                     missing_actual_completion=not bool(last),
+                                     evidence_review_required=level is None or renewal['renewal_review_required'],
                                      onboarding_status='not_required' if not rule['onboarding'] else 'unknown_start_date' if not person['start_date'] else 'missing' if onboarding_missing else 'recorded'))
+
     planned = [row for row in courses if row['status'] != 'cancelled']
     completed_courses = [row for row in planned if row['status'] == 'completed']
     person_hours = sum(row['hours'] for row in actual)
@@ -684,6 +722,9 @@ def register(app, db, authenticated, audit, error):
         db().executescript(SCHEMA)
         if 'history_json' not in {row['name'] for row in db().execute('PRAGMA table_info(hrm_training_assessment_context)')}:
             db().execute("ALTER TABLE hrm_training_assessment_context ADD COLUMN history_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(history_json) AND json_type(history_json)='array')")
+        columns={row['name'] for row in db().execute('PRAGMA table_info(hrm_training_assessment_context)')}
+        for name,definition in (('recorded_by','INTEGER REFERENCES users(id)'),('assessor_name',"TEXT NOT NULL DEFAULT ''"),('assessment_method',"TEXT NOT NULL DEFAULT ''"),('evidence',"TEXT NOT NULL DEFAULT ''")):
+            if name not in columns:db().execute('ALTER TABLE hrm_training_assessment_context ADD COLUMN '+name+' '+definition)
         db().commit()
     app.extensions.setdefault('hrm_catalog', {}).update(CATALOG)
 

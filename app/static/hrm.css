@@ -95,3 +95,51 @@
  .hrm-workflow-steps > * { flex:1 1 170px; }
  .hrm-accord-metrics .card strong { font-size:20px; }
 }
+.hrm-person-header { border-inline-start:4px solid var(--blue,#235dcc); }
+.hrm-person-header h2 { margin:6px 0 10px; }
+.hrm-person-context { padding:14px 18px; }
+.hrm-person-context p { margin:0 0 8px; }
+.hrm-person-context button { margin-top:10px; }
+.hrm-person-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 24px; margin:18px 0 0; }
+.hrm-person-fields > div { min-width:0; border-bottom:1px solid var(--line,#dfe6ef); padding:13px 0; }
+.hrm-person-fields dt { color:var(--muted,#61718a); font-size:12px; margin-bottom:7px; }
+.hrm-person-fields dd { margin:0; line-height:1.9; overflow-wrap:anywhere; white-space:pre-wrap; }
+.hrm-person-tabs button small { font-weight:normal; }
+.hrm-person-resources { margin-top:0; }
+.hrm-advanced-training { margin-top:18px; border-top:1px solid var(--line,#dfe6ef); padding-top:16px; }
+.hrm-advanced-training summary { cursor:pointer; font-weight:700; margin-bottom:14px; }
+.hrm-matrix-filter { display:flex; align-items:end; flex-wrap:wrap; gap:12px; }
+.hrm-matrix-filter label { flex:1 1 180px; min-width:0; margin:0; }
+.hrm-matrix-filter input,.hrm-matrix-filter select { width:100%; min-width:0; }
+.hrm-matrix-legend { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.hrm-matrix-legend > span { border:1px solid var(--line,#dfe6ef); padding:6px 10px; border-radius:7px; font-size:12px; }
+.hrm-matrix-legend b { display:inline-block; min-width:20px; text-align:center; }
+.hrm-matrix-scroll { max-height:620px; overflow:auto; }
+.hrm-skill-matrix { border-collapse:separate; border-spacing:0; width:max-content; min-width:100%; }
+.hrm-skill-matrix thead th { position:sticky; top:0; z-index:2; min-width:135px; max-width:180px; background:#eef3f9; vertical-align:top; }
+.hrm-skill-matrix .hrm-matrix-person-col { position:sticky; right:0; z-index:1; min-width:210px; max-width:260px; background:#fff; border-inline-end:2px solid var(--line,#dfe6ef); }
+.hrm-skill-matrix thead .hrm-matrix-person-col { z-index:3; background:#eef3f9; }
+.hrm-skill-matrix th small { display:block; font-size:11px; font-weight:normal; margin-top:7px; line-height:1.6; white-space:normal; }
+.hrm-skill-matrix td { text-align:center; padding:5px; min-width:135px; }
+.hrm-matrix-cell { display:flex; flex-direction:column; gap:5px; width:100%; border:0; background:transparent; padding:10px 5px; color:inherit; box-shadow:none; }
+.hrm-matrix-cell:hover { background:#ffffffa8; color:inherit; }
+.hrm-matrix-cell strong { font-size:18px; direction:ltr; }
+.hrm-matrix-cell strong span { font-size:12px; font-weight:normal; }
+.hrm-matrix-cell small { font-size:10px; white-space:normal; }
+.hrm-matrix-state-satisfied { background:#eaf5ed; color:#245d42; }
+.hrm-matrix-state-gap,.hrm-matrix-state-renewal_due { background:#fff0ec; color:#983b2e; }
+.hrm-matrix-state-unassessed,.hrm-matrix-state-requirement_missing { background:#f1f3f6; color:#536176; }
+.hrm-matrix-state-review_required { background:#fff7df; color:#775414; }
+.hrm-matrix-state-not_required,.hrm-matrix-empty { background:#fafbfc; color:#79889c; }
+.hrm-critical-label { display:inline-block; margin-top:6px; font-size:9px; border:1px solid #c67d7d; color:#984040; border-radius:4px; padding:2px 5px; }
+.hrm-matrix-detail { margin-top:22px; border:1px solid var(--line,#dfe6ef); border-radius:10px; padding:18px; }
+.hrm-matrix-detail h3 { margin-top:0; }
+@media(max-width:760px){
+ .hrm-person-fields { grid-template-columns:minmax(0,1fr); }
+ .hrm-matrix-filter label { flex-basis:100%; }
+ .hrm-skill-matrix .hrm-matrix-person-col { min-width:160px; max-width:180px; }
+ .hrm-skill-matrix thead th,.hrm-skill-matrix td { min-width:120px; }
+ .hrm-matrix-detail { padding:14px; }
+}
+
+.hrm-skill-matrix .hrm-matrix-cell:hover:not(:disabled) { background:#ffffffa8; color:inherit; }

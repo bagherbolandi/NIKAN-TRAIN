@@ -163,3 +163,11 @@ def begin_write(conn):
         with conn:
             conn.execute('BEGIN IMMEDIATE')
             yield conn
+
+
+def exact_rial_fields(values):
+    """Keep JSON numeric compatibility and provide lossless decimal UI values."""
+    for key, value in list(values.items()):
+        if key.endswith('_rials') and (type(value) is int or value is None):
+            values[key + '_exact'] = str(value) if value is not None else None
+    return values

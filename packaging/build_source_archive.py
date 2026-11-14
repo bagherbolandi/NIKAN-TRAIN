@@ -1,4 +1,4 @@
-"""Package Nikan HRM 0.12 source and its three verified offline installers.
+"""Package Nikan HRM 0.14 source and its three verified offline installers.
 
 Build installers first with build_installer.py --test and --network, then run
 this script. Importing the module or requesting --help needs no build artifacts.
@@ -11,7 +11,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.13.0'
+VERSION = '0.14.0'
 ARCHIVE_ROOT = f'NikanHRM-{VERSION}'
 INSTALLERS = (
     'NikanHRM-Test-Setup.exe',
@@ -138,6 +138,6 @@ def build(root=ROOT, output=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, help='Override distribution/NikanHRM-0.13.0-Source.zip')
+    parser.add_argument('--output', type=Path, help='Override distribution/NikanHRM-0.14.0-Source.zip')
     arguments = parser.parse_args()
     build(output=arguments.output)

@@ -14,7 +14,7 @@ REQUIRED={'companies','users','employees','skills','assessments','records','cert
 RECOVERY_ADDITIONS={'holding_catalog_state':1,'course_participants':0,'company_registry':1}
 RECOVERY_ADDITIONS.update({'schema_migrations':1,'need_reviews':0,'development_plans':0,
                           'password_recovery':0,'recovery_rate':0,
-                          'hrm_schema_migrations':3,'hrm_user_access':0,
+                          'hrm_schema_migrations':4,'hrm_user_access':0,
                           'hrm_user_scopes':0,'hrm_user_permissions':0})
 from app.hrm_people import RECOVERY_ADDITIONS as PEOPLE_ADDITIONS
 from app.hrm_hse import RECOVERY_ADDITIONS as HSE_ADDITIONS
@@ -93,7 +93,7 @@ def decrypt(backup,output,key):
 def recovery_check(backup,key,temp_root):
  with tempfile.TemporaryDirectory(prefix='recovery-test-',dir=temp_root) as folder:
   candidate=Path(folder)/'nikan.sqlite3';header=decrypt(backup,candidate,key)
-  marker_versions={'schema_migrations':{'0.11.0'},'hrm_schema_migrations':{'hrm-1','hrm-0.12','hrm-0.13'}}
+  marker_versions={'schema_migrations':{'0.11.0'},'hrm_schema_migrations':{'hrm-1','hrm-0.12','hrm-0.13','hrm-0.14'}}
   markers={}
   with sqlite3.connect(candidate) as before:
    for name in marker_versions:

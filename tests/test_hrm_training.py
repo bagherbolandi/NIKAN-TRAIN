@@ -207,8 +207,11 @@ def test_migration_does_not_rewrite_existing_training_data_or_invent_presence(tr
     restarted = create_app(d['root'], testing=True)
     assert snapshot() == original
     client, h = login(restarted, 'trainer-a')
-    assert row(client, 'training_records', grade)['level'] == 4
-    assert row(client, 'training_assessments', assessment)['level'] == 2
+    assert client.get('/api/hrm/training_records').json == []
+    assert client.get('/api/hrm/training_assessments').json == []
+    broad, _ = login(restarted, 'training-admin')
+    assert row(broad, 'training_records', grade)['level'] == 4
+    assert row(broad, 'training_assessments', assessment)['level'] == 2
     assert client.put('/api/hrm/training_records/' + str(grade), headers=h, json={'version': 0, 'level': 3}).status_code == 403
     assert client.get('/api/hrm/training_report').json['metrics']['actual_attendances'] == 0
     with sqlite3.connect(d['app'].config['DB']) as conn:
@@ -360,7 +363,9 @@ def test_soft_void_is_respected_by_legacy_gap_views(training):
     assert not any(row['employee_id'] == eid for row in d['admin'].get('/api/gaps?company_id=1').json)
     assert d['a'].delete('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': 1}).status_code == 200
     gaps = d['admin'].get('/api/gaps?company_id=1').json
-    assert next(row for row in gaps if row['employee_id'] == eid)['gap'] == 3
+    unknown=next(row for row in gaps if row['employee_id'] == eid)
+    assert unknown['gap'] is None and unknown['current'] is None
+    assert unknown['required']==3 and unknown['requires_assessment']
 
 
 def test_same_day_new_site_assessment_preserves_scoped_prior_versions(training):
@@ -408,3 +413,219 @@ def test_same_day_new_site_assessment_preserves_scoped_prior_versions(training):
         history = conn.execute('SELECT history_json FROM hrm_training_assessment_context WHERE assessment_id=?', (original['id'],)).fetchone()[0]
         assert '"level":4' in history and '"level":0' in history
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_shared_hse_training_completion_requires_actual_presence_and_survives_grade_void(training, monkeypatch):
+    d = training
+    import app.hrm_training as training_module
+    import app.hrm_hse as hse_module
+    monkeypatch.setattr(training_module, 'today_iso', lambda: '2026-11-13')
+    monkeypatch.setattr(hse_module, 'today_iso', lambda: '2026-11-13')
+    eid, site = d['people'][0]['id'], d['sites'][0]['id']
+    created = course(d, date='2026-10-20')
+    grade = create(d['a'], d['ha'], 'training_records', {'employee_id': eid, 'course_id': created['id'], 'level': 4, 'record_date': '2026-10-20'})
+    create(d['a'], d['ha'], 'training_requirements', {'company_id': 1, 'site_id': site,
+        'competency_code': CODE, 'required_level': 3, 'renewal_days': 30})
+    create(d['admin'], d['ah'], 'hse_training_requirements', {'site_id': site, 'domain': 'safety',
+        'competency_code': CODE, 'required_level': 3, 'renewal_days': 30}, 1)
+    def evidence():
+        general = d['admin'].get('/api/hrm/training_report?company_id=1&employee_id=' + str(eid)).json['requirements'][0]
+        safety = d['admin'].get('/api/hrm/hse_report?company_id=1&employee_id=' + str(eid)).json['training'][0]
+        keys = ('current_level', 'level_source', 'last_training_date', 'actual_completion_status',
+                'renewal_due_date', 'renewal_due', 'renewal_status', 'renewal_review_required')
+        assert {k: general[k] for k in keys} == {k: safety[k] for k in keys}
+        return general, safety
+    general, safety = evidence()
+    assert general['current_level'] == 4 and general['last_training_date'] == ''
+    assert general['renewal_due'] is None and general['renewal_review_required']
+    assert safety['training_due'] and safety['evidence_review_required']
+    assert d['a'].put('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': grade['version'], 'attended': 1}).status_code == 200
+    general, safety = evidence()
+    assert general['last_training_date'] == '2026-10-20' and general['renewal_due'] is False
+    assert not general['renewal_review_required'] and not safety['training_due']
+    fresh = row(d['a'], 'training_records', grade['id'])
+    # Withdrawal changes actual completion without deleting the grade.
+    assert d['a'].put('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': fresh['version'], 'attended': 0}).status_code == 200
+    general, safety = evidence()
+    assert general['current_level'] == 4 and general['last_training_date'] == ''
+    assert general['renewal_due'] is None and safety['evidence_review_required']
+    fresh = row(d['a'], 'training_records', grade['id'])
+    assert d['a'].put('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': fresh['version'], 'attended': 1}).status_code == 200
+    fresh = row(d['a'], 'training_records', grade['id'])
+    assert d['a'].delete('/api/hrm/training_records/' + str(grade['id']), headers=d['ha'], json={'version': fresh['version']}).status_code == 200
+    general, safety = evidence()
+    assert general['current_level'] is None and general['last_training_date'] == '2026-10-20'
+    assert general['renewal_due'] is False and safety['evidence_review_required']
+
+
+def test_latest_completed_grade_including_zero_is_shared_competency_fallback(training):
+    d = training
+    eid, site = d['people'][0]['id'], d['sites'][0]['id']
+    old = course(d, date='2026-09-01')
+    new = course(d, date='2026-10-01')
+    create(d['a'], d['ha'], 'training_records', {'employee_id': eid, 'course_id': old['id'], 'level': 4, 'record_date': '2026-09-01'})
+    latest = create(d['a'], d['ha'], 'training_records', {'employee_id': eid, 'course_id': new['id'], 'level': 0, 'record_date': '2026-10-01'})
+    create(d['a'], d['ha'], 'training_requirements', {'company_id': 1, 'site_id': site, 'competency_code': CODE, 'required_level': 3})
+    create(d['admin'], d['ah'], 'hse_training_requirements', {'site_id': site, 'domain': 'safety', 'competency_code': CODE, 'required_level': 3}, 1)
+    general = d['admin'].get('/api/hrm/training_report?company_id=1&employee_id=' + str(eid)).json['requirements'][0]
+    safety = d['admin'].get('/api/hrm/hse_report?company_id=1&employee_id=' + str(eid)).json['training'][0]
+    assert general['current_level'] == safety['current_level'] == 0
+    assert general['gap'] == safety['gap'] == 3
+    assert general['level_record_id'] == safety['level_record_id'] == latest['id']
+    assert general['level_source'] == safety['level_source'] == 'completed_course_record'
+    assert general['last_training_date'] == safety['last_training_date'] == ''
+
+
+def test_historical_unknown_site_and_transfer_evidence_never_gain_current_membership(training):
+    d = training
+    eid, old_site = d['people'][0]['id'], d['sites'][0]['id']
+    skill = d['admin'].post('/api/competency-bank/' + CODE + '/select?company_id=1', headers=d['ah']).json['id']
+    # A real legacy source has company ownership but no historical site metadata.
+    legacy = d['admin'].post('/api/data/assessments?company_id=1', headers=d['ah'], json={'employee_id': eid, 'skill_id': skill, 'level': 4})
+    assert legacy.status_code == 201
+    create(d['a'], d['ha'], 'training_requirements', {'company_id': 1, 'site_id': old_site, 'competency_code': CODE, 'required_level': 3})
+    local = d['a'].get('/api/hrm/training_report?employee_id=' + str(eid)).json['requirements'][0]
+    assert local['current_level'] is None and local['evidence_review_required']
+    holding = d['admin'].get('/api/hrm/training_report?company_id=1&employee_id=' + str(eid)).json['requirements'][0]
+    assert holding['current_level'] == 4 and holding['assessment_owner']['site_id'] is None
+    created = course(d)
+    attendance_grade = create(d['a'], d['ha'], 'training_records', {'employee_id': eid, 'course_id': created['id'], 'level': 2, 'attended': 1})
+    before = d['admin'].get('/api/hrm/people/' + str(eid)).json
+    assert d['admin'].put('/api/hrm/people/' + str(eid), headers=d['ah'], json={'version': before['version'], 'site_id': d['sites'][1]['id'], 'department': 'B', 'effective_date': '2026-11-01'}).status_code == 200
+    create(d['b'], d['hb'], 'training_requirements', {'company_id': 1, 'site_id': d['sites'][1]['id'], 'competency_code': CODE, 'required_level': 3, 'renewal_days': 90})
+    local_b = d['b'].get('/api/hrm/training_report?employee_id=' + str(eid)).json['requirements'][0]
+    assert local_b['current_level'] is None and local_b['last_training_date'] == ''
+    holding_b = d['admin'].get('/api/hrm/training_report?company_id=1&employee_id=' + str(eid)).json['requirements'][0]
+    assert holding_b['current_level'] == 4 and holding_b['last_training_date'] == '2026-10-01'
+    assert holding_b['actual_owner']['site_id'] == old_site
+    with sqlite3.connect(d['app'].config['DB']) as conn:
+        assert conn.execute('SELECT attendance_site_id FROM course_participants WHERE course_id=? AND employee_id=?', (created['id'], eid)).fetchone()[0] == old_site
+        assert conn.execute('SELECT site_id FROM hrm_training_record_context WHERE record_id=?', (attendance_grade['id'],)).fetchone()[0] == old_site
+
+
+def test_shared_renewal_boundary_and_unknown_completion_are_explicit():
+    from app.hrm_training_evidence import renewal_evidence
+    assert renewal_evidence('2026-10-14', 30, '2026-11-13')['renewal_due'] is True
+    assert renewal_evidence('2026-10-15', 30, '2026-11-13')['renewal_due'] is False
+    unknown = renewal_evidence('', 30, '2026-11-13')
+    assert unknown['renewal_due'] is None and unknown['renewal_review_required']
+    assert unknown['renewal_status'] == 'unknown_actual_completion'
+    assert renewal_evidence('', None)['renewal_status'] == 'not_configured'
+
+
+def test_assessment_metadata_distinguishes_recorder_from_declared_assessor_and_preserves_versions(training):
+    d = training
+    eid = d['people'][0]['id']
+    bad = d['a'].post('/api/hrm/training_assessments', headers=d['ha'], json={
+        'employee_id': eid, 'competency_code': CODE, 'level': 3, 'assessment_date': '2026-10-01',
+        'recorded_by': d['admin'].get('/api/me').json['hrm']['user_id']})
+    assert bad.status_code == 400
+    created = create(d['a'], d['ha'], 'training_assessments', {
+        'employee_id': eid, 'competency_code': CODE, 'level': 3, 'assessment_date': '2026-10-01',
+        'assessor_name': 'Declared external assessor', 'assessment_method': 'Observed work and practical test',
+        'evidence': 'Approved work sample WS-123'})
+    created = row(d['a'],'training_assessments',created['id'])
+    assert created['recorded_by'] == d['a'].get('/api/me').json['hrm']['user_id']
+    assert created['recorded_by_name'] == 'trainer-a'
+    assert created['assessor_name'] == 'Declared external assessor'
+    edited = d['admin'].put('/api/hrm/training_assessments/' + str(created['id']), headers=d['ah'], json={
+        'version': created['version'], 'evidence': 'Verified work sample WS-124'})
+    assert edited.status_code == 200, edited.json
+    updated = row(d['admin'],'training_assessments',created['id'])
+    assert updated['recorded_by_name'] == 'training-admin'
+    assert updated['assessor_name'] == 'Declared external assessor'
+    history = d['a'].get('/api/hrm/training_assessment_history').json
+    prior = next(row for row in history if row['assessment_id'] == created['id'])
+    assert prior['recorded_by_name'] == 'trainer-a'
+    assert prior['assessor_name'] == 'Declared external assessor'
+    assert prior['evidence'] == 'Approved work sample WS-123'
+    create(d['a'], d['ha'], 'training_requirements', {'company_id': 1, 'site_id': d['sites'][0]['id'],
+        'competency_code': CODE, 'required_level': 3})
+    evidence = d['a'].get('/api/hrm/training_report?employee_id=' + str(eid)).json['requirements'][0]
+    assert evidence['recorded_by']['username'] == 'training-admin'
+    assert evidence['assessor_name'] == 'Declared external assessor'
+    assert evidence['assessment_method'] == 'Observed work and practical test'
+    assert evidence['assessment_evidence'] == 'Verified work sample WS-124'
+
+
+def test_legacy_assessment_metadata_stays_explicitly_unknown_until_a_future_recorded_version(training):
+    d = training
+    eid = d['people'][0]['id']
+    skill = d['admin'].post('/api/competency-bank/' + CODE + '/select?company_id=1', headers=d['ah']).json['id']
+    legacy = d['admin'].post('/api/data/assessments?company_id=1', headers=d['ah'], json={
+        'employee_id': eid, 'skill_id': skill, 'level': 2})
+    assert legacy.status_code == 201
+    original = row(d['admin'], 'training_assessments', legacy.json['id'])
+    assert original['recorded_by'] is None and original['recorded_by_name'] is None
+    assert all(original[key] == '' for key in ('assessor_name', 'assessment_method', 'evidence'))
+    edited = d['admin'].put('/api/hrm/training_assessments/' + str(original['id']), headers=d['ah'], json={
+        'version': original['version'], 'assessment_date': '2026-10-01', 'assessment_method': 'Explicit follow-up assessment'})
+    assert edited.status_code == 200, edited.json
+    updated = row(d['admin'],'training_assessments',original['id'])
+    assert updated['recorded_by_name'] == 'training-admin' and updated['assessor_name'] == ''
+    history = d['admin'].get('/api/hrm/training_assessment_history').json
+    prior = next(row for row in history if row['assessment_id'] == original['id'])
+    assert prior['recorded_by'] is None and prior['assessor_name'] == '' and prior['assessment_method'] == ''
+
+
+def test_hse_curriculum_is_a_live_minimal_readonly_source_for_training_without_duplicate_rules(training):
+    d = training
+    eid, site = d['people'][0]['id'], d['sites'][0]['id']
+    safety = create(d['admin'], d['ah'], 'hse_training_requirements', {'site_id': site, 'domain': 'safety',
+        'competency_code': CODE, 'required_level': 2, 'renewal_days': 15,
+        'notes': 'PRIVATE-HSE-OWNER-NOTE'}, 1)
+    environment = create(d['admin'], d['ah'], 'health_environment_training_requirements', {'site_id': site,
+        'domain': 'environment', 'competency_code': CODE, 'required_level': 3, 'renewal_days': 30,
+        'notes': 'PRIVATE-ENVIRONMENT-OWNER-NOTE'}, 1)
+    # The trainer has no HSE grants but may plan their employees' applicable
+    # curriculum; incident, risk and clinical narratives are not exposed.
+    assert d['a'].get('/api/hrm/hse_training_requirements?company_id=1').status_code == 403
+    response = d['a'].get('/api/hrm/training_report?company_id=1&employee_id=' + str(eid))
+    assert response.status_code == 200, response.json
+    assert 'PRIVATE-' not in response.get_data(as_text=True)
+    requirement = response.json['requirements'][0]
+    assert requirement['required_level'] == 3 and requirement['renewal_days'] == 15
+    assert requirement['sources'] == ['hse_curriculum']
+    assert {ref['id'] for ref in requirement['source_refs']} == {safety['id'], environment['id']}
+    assert d['a'].get('/api/hrm/training_requirements').json == []
+    denied = d['a'].put('/api/hrm/hse_training_requirements/' + str(safety['id']), headers=d['ha'], json={
+        'version': safety['version'], 'required_level': 1})
+    assert denied.status_code == 403
+    changed = d['admin'].put('/api/hrm/hse_training_requirements/' + str(safety['id']), headers=d['ah'], json={
+        'version': safety['version'], 'required_level': 4, 'renewal_days': 10})
+    assert changed.status_code == 200, changed.json
+    refreshed = d['a'].get('/api/hrm/training_report?employee_id=' + str(eid)).json['requirements'][0]
+    assert refreshed['required_level'] == 4 and refreshed['renewal_days'] == 10
+    with sqlite3.connect(d['app'].config['DB']) as conn:
+        assert conn.execute('SELECT count(*) FROM hrm_training_requirements').fetchone()[0] == 0
+        assert conn.execute('SELECT count(*) FROM hrm_hse_training_requirements').fetchone()[0] == 2
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_contextless_training_history_keeps_original_company_read_access_after_transfer(training):
+    d = training
+    eid = d['people'][0]['id']
+    skill = d['admin'].post('/api/competency-bank/' + CODE + '/select?company_id=1', headers=d['ah']).json['id']
+    original = d['admin'].post('/api/data/courses?company_id=1', headers=d['ah'], json={
+        'skill_id': skill, 'title': 'Original company legacy course', 'date': '1405/07/01', 'hours': 2, 'status': 'completed'})
+    assert original.status_code == 201
+    grade = d['admin'].post('/api/data/records?company_id=1', headers=d['ah'], json={
+        'employee_id': eid, 'course_id': original.json['id'], 'level': 3})
+    assert grade.status_code == 201
+    assessment = d['admin'].post('/api/data/assessments?company_id=1', headers=d['ah'], json={
+        'employee_id': eid, 'skill_id': skill, 'level': 2})
+    assert assessment.status_code == 201
+    before = d['admin'].get('/api/hrm/people/' + str(eid)).json
+    moved = d['admin'].put('/api/hrm/people/' + str(eid), headers=d['ah'], json={
+        'version': before['version'], 'company_id': 2, 'site_id': d['sites'][2]['id'],
+        'department': 'C', 'effective_date': '2026-11-01'})
+    assert moved.status_code == 200, moved.json
+    original_owner, _ = d['account']('original-company-reader', [{'company_id': 1}])
+    new_owner, _ = d['account']('new-company-reader', [{'company_id': 2}])
+    assert [r['id'] for r in original_owner.get('/api/hrm/training_records').json] == [grade.json['id']]
+    assert [r['id'] for r in original_owner.get('/api/hrm/training_assessments').json] == [assessment.json['id']]
+    assert new_owner.get('/api/hrm/training_records').json == []
+    assert new_owner.get('/api/hrm/training_assessments').json == []
+    assert d['a'].get('/api/hrm/training_records').json == []  # Unknown old site is not site A.
+    with sqlite3.connect(d['app'].config['DB']) as conn:
+        assert conn.execute('SELECT company_id FROM records WHERE id=?',(grade.json['id'],)).fetchone()[0] == 1
